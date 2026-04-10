@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# ML Models (too large for git)
+backend/ml_models/*.pkl
+backend/ml_models/*.joblib
+
+# Data files
+backend/data/statsbomb/*.parquet
+backend/data/benchmarks/*.parquet
+
+# Logs
+backend/logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node / Frontend
+node_modules/
+frontend/.next/
+frontend/out/
+.vercel
+
+# Docker
+docker-compose.override.yml
+
+# Coverage
+htmlcov/
+.coverage
+.pytest_cache/
