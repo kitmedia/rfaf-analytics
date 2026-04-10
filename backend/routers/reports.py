@@ -1,7 +1,10 @@
 """Router: GET /api/reports - listar y obtener informes."""
 
+import os
 import uuid
 
+import anthropic
+import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -11,6 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.database import get_db
 from backend.models import AnalysisStatus, Match, MatchAnalysis
 from backend.services.pdf_service import generate_pdf
+from backend.services.tracking_service import (
+    track_chatbot_query,
+    track_pdf_downloaded,
+    track_report_viewed,
+)
+
+logger = structlog.get_logger()
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -94,6 +104,13 @@ async def get_report(
         raise HTTPException(status_code=404, detail="Informe no encontrado.")
 
     analysis, match = row
+
+    if analysis.status == AnalysisStatus.DONE:
+        track_report_viewed(
+            club_id=str(analysis.club_id),
+            analysis_id=str(analysis.id),
+        )
+
     return ReportDetail(
         analysis_id=analysis.id,
         equipo_local=match.equipo_local,
@@ -139,6 +156,11 @@ async def download_report_pdf(
     if not analysis.contenido_md:
         raise HTTPException(status_code=400, detail="El informe no tiene contenido.")
 
+    track_pdf_downloaded(
+        club_id=str(analysis.club_id),
+        analysis_id=str(analysis_id),
+    )
+
     pdf_bytes = generate_pdf(
         contenido_md=analysis.contenido_md,
         charts_json=analysis.charts_json,
@@ -155,3 +177,78 @@ async def download_report_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+class ChatRequest(BaseModel):
+    question: str
+    club_id: uuid.UUID
+
+
+class ChatResponse(BaseModel):
+    answer: str
+    model: str
+
+
+@router.post("/{analysis_id}/chat", response_model=ChatResponse)
+async def chat_about_report(
+    analysis_id: uuid.UUID,
+    request: ChatRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Chatbot táctico con Haiku — responde preguntas sobre un informe específico."""
+    result = await db.execute(
+        select(MatchAnalysis, Match)
+        .join(Match, MatchAnalysis.match_id == Match.id)
+        .where(MatchAnalysis.id == analysis_id)
+        .where(MatchAnalysis.club_id == request.club_id)
+    )
+    row = result.one_or_none()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Informe no encontrado.")
+
+    analysis, match = row
+
+    if analysis.status != AnalysisStatus.DONE or not analysis.contenido_md:
+        raise HTTPException(
+            status_code=400,
+            detail="El informe aún no está disponible para consultas.",
+        )
+
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="Servicio de IA no configurado.")
+
+    system = (
+        f"Eres un analista táctico de fútbol experto. Tienes acceso al informe táctico completo "
+        f"del partido {match.equipo_local} vs {match.equipo_visitante}. "
+        f"Responde en español, de forma concisa y usando terminología táctica correcta.\n\n"
+        f"INFORME:\n{analysis.contenido_md[:8000]}"
+    )
+
+    client = anthropic.Anthropic(api_key=api_key)
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=512,
+        system=system,
+        messages=[{"role": "user", "content": request.question}],
+    )
+
+    answer = response.content[0].text
+
+    track_chatbot_query(
+        club_id=str(request.club_id),
+        analysis_id=str(analysis_id),
+        query_length=len(request.question),
+    )
+
+    logger.info(
+        "chatbot_query",
+        analysis_id=str(analysis_id),
+        club_id=str(request.club_id),
+        query_length=len(request.question),
+        answer_length=len(answer),
+        model="claude-haiku-4-5-20251001",
+    )
+
+    return ChatResponse(answer=answer, model="claude-haiku-4-5-20251001")

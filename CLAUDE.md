@@ -33,11 +33,11 @@ YouTube URL -> Gemini 2.5 Flash (JSON tactico) -> Metricas (xG, PPDA, VAEP) -> V
 - Video: gemini-2.5-flash (NUNCA gemini-pro ni ultra en automatico)
 
 ## Estado actual
-- Fase: Sprints 1-8 COMPLETADOS
+- Fase: Sprints 1-9 COMPLETADOS
 - Clubes activos: 5 | MRR: ~651 EUR | Margen: ~94%
-- Siguiente paso: despliegue a produccion (rfaf-analytics.es) + metricas PostHog en vivo
+- Siguiente paso: validacion con clubes piloto + lanzamiento publico
 
-## Sprints completados (1-8)
+## Sprints completados (1-9)
 
 ### Sprint 1 — Infraestructura base DONE
 - Docker Compose: Postgres 16 + Redis 7 + Backend + Celery + Flower
@@ -90,6 +90,17 @@ YouTube URL -> Gemini 2.5 Flash (JSON tactico) -> Metricas (xG, PPDA, VAEP) -> V
 - CLI: backend/scripts/onboard_club.py — onboarding completo (Club + User + email bienvenida)
 - Modelo Feedback en models.py + migracion Alembic 3cd6c35f
 
+### Sprint 9 — PostHog tracking en vivo + Production hardening DONE
+- BETA-02: backend/services/tracking_service.py — PostHog completo (8 eventos: analysis_started/completed/failed, report_viewed, pdf_downloaded, chatbot_query, feedback_submitted, club_subscribed/cancelled)
+- Tracking integrado en: analyze.py, reports.py, feedback.py, webhooks.py, workers/tasks.py
+- POST /api/reports/{id}/chat — chatbot tactico Haiku con tracking y logs
+- GET /api/health mejorado — check real de DB + Redis + estado PostHog
+- frontend/lib/posthog.ts — cliente PostHog frontend (lazy-init, no SSR)
+- railway.toml — config deployment Railway (backend + worker + beat)
+- .env.example actualizado — POSTHOG_HOST, ALLOWED_ORIGINS, NEXT_PUBLIC_* vars
+- backend/tests/test_sprint9.py — tests integracion (health, chat 404, tracking silent-fail)
+- CORS mejorado — ALLOWED_ORIGINS configurable desde env (no mas wildcard en prod)
+
 ## Archivos clave por funcionalidad
 
 ### Backend API
@@ -98,7 +109,7 @@ YouTube URL -> Gemini 2.5 Flash (JSON tactico) -> Metricas (xG, PPDA, VAEP) -> V
 - backend/database.py — AsyncEngine, get_db, create_tables, drop_tables
 - backend/routers/analyze.py — POST /api/analyze/match + GET /api/analyze/status/{id}
 - backend/routers/clubs.py — CRUD clubes + Stripe Checkout
-- backend/routers/reports.py — lista + detalle + PDF download
+- backend/routers/reports.py — lista + detalle + PDF download + POST /chat (chatbot Haiku)
 - backend/routers/admin.py — GET /api/admin/dashboard
 - backend/routers/feedback.py — POST/GET /api/feedback
 - backend/routers/webhooks.py — POST /api/webhooks/stripe (idempotente)

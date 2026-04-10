@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.models import Club, PlanType
+from backend.services.tracking_service import track_club_cancelled, track_club_subscribed
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -82,6 +83,10 @@ async def _handle_checkout_completed(data: dict, db: AsyncSession):
         )
     )
 
+    PLAN_PRICES = {"basico": 49.0, "profesional": 149.0, "federado": 104.0}
+    mrr = PLAN_PRICES.get(plan_type.value, 0.0)
+    track_club_subscribed(club_id=club_id, plan=plan_type.value, mrr_eur=mrr)
+
     await logger.ainfo(
         "stripe_subscription_activated",
         club_id=club_id,
@@ -135,6 +140,11 @@ async def _handle_subscription_deleted(data: dict, db: AsyncSession):
         update(Club)
         .where(Club.id == club.id)
         .values(plan=PlanType.BASICO, active=True)
+    )
+
+    track_club_cancelled(
+        club_id=str(club.id),
+        plan=club.plan.value if hasattr(club.plan, "value") else str(club.plan),
     )
 
     await logger.ainfo(

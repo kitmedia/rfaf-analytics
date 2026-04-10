@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.models import Club, Feedback, FeedbackCategory
+from backend.services.tracking_service import track_feedback_submitted
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 
@@ -70,6 +71,12 @@ async def create_feedback(
     )
     db.add(fb)
     await db.flush()
+
+    track_feedback_submitted(
+        club_id=str(request.club_id),
+        rating=request.rating,
+        category=request.category,
+    )
 
     return FeedbackResponse(
         id=fb.id,

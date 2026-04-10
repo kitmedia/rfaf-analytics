@@ -76,6 +76,9 @@ def _save_tactical_data(match_id: str, tactical_data: dict):
         session.commit()
 
 
+import time
+
+
 @app.task(
     bind=True,
     name="analyze_match",
@@ -98,6 +101,8 @@ def analyze_match_task(
     Idempotente: si falla, Celery reintenta sin crear duplicados.
     """
     import asyncio
+
+    _task_start_time = time.time()
 
     try:
         # Step 1: Gemini analysis
@@ -181,11 +186,25 @@ def analyze_match_task(
             xg_visitante=round(xg_visitante, 2),
         )
 
+        duration_s = time.time() - _task_start_time
+
+        from backend.services.tracking_service import track_analysis_completed
+        track_analysis_completed(
+            club_id=club_id,
+            analysis_id=analysis_id,
+            duration_s=duration_s,
+            cost_gemini=0.49,
+            cost_claude=cost_claude,
+            xg_local=round(xg_local, 2),
+            xg_visitante=round(xg_visitante, 2),
+        )
+
         logger.info(
             "analyze_match_done",
             analysis_id=analysis_id,
             club_id=club_id,
             cost_eur=round(0.49 + cost_claude, 4),
+            duration_s=round(duration_s, 1),
             charts_count=len(charts_json),
         )
 
@@ -201,4 +220,13 @@ def analyze_match_task(
         _update_analysis_status(
             analysis_id, "error", 0, f"Error: {str(exc)[:200]}"
         )
+
+        from backend.services.tracking_service import track_analysis_failed
+        track_analysis_failed(
+            club_id=club_id,
+            analysis_id=analysis_id,
+            error_type=type(exc).__name__,
+            retry_count=self.request.retries,
+        )
+
         raise self.retry(exc=exc)

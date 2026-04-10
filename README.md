@@ -2,7 +2,7 @@
 
 Plataforma SaaS de análisis táctico de fútbol con IA para la Real Federación Aragonesa de Fútbol (RFAF). Analiza vídeos de YouTube de partidos, genera métricas avanzadas (xG, PPDA, Field Tilt) con modelos propios, crea visualizaciones con mplsoccer y produce informes PDF con Claude Sonnet 4.6.
 
-**Estado:** Sprints 1-8 completados · 5 clubes activos · MRR ~651 EUR
+**Estado:** Sprints 1-9 completados · 5 clubes activos · MRR ~651 EUR
 
 ---
 
@@ -289,14 +289,25 @@ locust -f backend/tests/locustfile.py --host http://localhost:8000 \
 | Sprint 6 | Frontend conectado: formulario análisis + polling | ✅ Done |
 | Sprint 7 | Login, mis informes, chatbot táctico, panel admin | ✅ Done |
 | Sprint 8 | Onboarding beta, admin completo, load test, backup | ✅ Done |
+| Sprint 9 | PostHog tracking en vivo, chatbot API, production hardening | ✅ Done |
+
+---
+
+## API Endpoints nuevos (Sprint 9)
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| `POST` | `/api/reports/{id}/chat` | Chatbot táctico Haiku — preguntas sobre el informe |
+
+El health check `/api/health` ahora verifica DB, Redis y estado de PostHog en tiempo real.
 
 ---
 
 ## Contribuir / Desplegar
 
-- **Backend (Railway):** push a `main` → build Docker automático
+- **Backend (Railway):** push a `main` → build Docker automático (`railway.toml` configurado)
 - **Frontend (Vercel):** push a `main` → deploy automático, PR → preview URL
-- **Variables de entorno en Railway:** igual que `.env.example`
+- **Variables de entorno en Railway:** igual que `.env.example` (incluye `POSTHOG_API_KEY`, `ALLOWED_ORIGINS`)
 
 ---
 

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.models import AnalysisStatus, Club, Match, MatchAnalysis, PlanType
+from backend.services.tracking_service import track_analysis_started
 from backend.workers.tasks import analyze_match_task
 
 PLAN_LIMITS = {
@@ -124,6 +125,15 @@ async def analyze_match(
         equipo_visitante=request.equipo_visitante,
         competicion=request.competicion,
         club_id=str(request.club_id),
+    )
+
+    track_analysis_started(
+        club_id=str(request.club_id),
+        analysis_id=str(analysis.id),
+        youtube_url=request.youtube_url,
+        equipo_local=request.equipo_local,
+        equipo_visitante=request.equipo_visitante,
+        competicion=request.competicion,
     )
 
     return AnalyzeMatchResponse(
