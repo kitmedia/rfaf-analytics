@@ -33,16 +33,16 @@ YouTube URL -> Gemini 2.5 Flash (JSON tactico) -> Metricas (xG, PPDA, VAEP) -> V
 - Video: gemini-2.5-flash (NUNCA gemini-pro ni ultra en automatico)
 
 ## Estado actual
-- Fase: Sprint 8 de Fase 2 (EN CURSO)
+- Fase: Sprints 1-8 COMPLETADOS
 - Clubes activos: 5 | MRR: ~651 EUR | Margen: ~94%
-- Sprint Goal: rfaf-analytics.es en produccion. 5 clubes activos pagando. MRR real. Metricas en PostHog. Load test superado.
+- Siguiente paso: despliegue a produccion (rfaf-analytics.es) + metricas PostHog en vivo
 
-## Sprints completados (1-7)
+## Sprints completados (1-8)
 
 ### Sprint 1 — Infraestructura base DONE
 - Docker Compose: Postgres 16 + Redis 7 + Backend + Celery + Flower
 - 7 modelos SQLAlchemy: Club, User, Match, MatchAnalysis, Player, ScoutReport, PlayerPhysical
-- Alembic migraciones
+- Alembic migraciones (3 versiones: schema inicial, feedbacks table, widen current_step)
 - Redis cache con TTL 30 dias (key = SHA256(url))
 
 ### Sprint 2 — DevOps + Celery DONE
@@ -81,22 +81,58 @@ YouTube URL -> Gemini 2.5 Flash (JSON tactico) -> Metricas (xG, PPDA, VAEP) -> V
 - Panel administracion RFAF con datos reales (MRR, clubes, pipeline)
 - BETA-01: onboarding 5 clubes piloto iniciado
 
-## Sprint 8 — Produccion y metricas (EN CURSO)
+### Sprint 8 — Produccion y metricas DONE
+- BETA-03: backend/routers/feedback.py — POST /api/feedback + GET /api/feedback con filtro club
+- BETA-03: frontend/app/feedback/page.tsx — formulario feedback con categorias y estrellas
+- BETA-04: backend/routers/admin.py — GET /api/admin/dashboard (MRR real, costes IA, margen, avg_rating)
+- BETA-05: backend/tests/locustfile.py — load test Locust 20 usuarios simultaneos
+- OPS-05: backend/scripts/backup_postgres.py — backup pg_dump + gzip + upload R2
+- CLI: backend/scripts/onboard_club.py — onboarding completo (Club + User + email bienvenida)
+- Modelo Feedback en models.py + migracion Alembic 3cd6c35f
 
-### Stories pendientes:
-- BETA-03: Formulario feedback estructurado -> POST /api/feedback + app/feedback/page.tsx
-- BETA-04: Panel admin completo -> GET /api/admin/dashboard (MRR real, costes IA, alertas)
-- BETA-05: Load test -> locust 20 usuarios simultaneos sin errores
-- OPS-05: Backup PostgreSQL automatico -> backend/scripts/backup_postgres.py
-- FE-Iteraciones-feedback: mejoras frontend basadas en feedback clubes
+## Archivos clave por funcionalidad
 
-### Archivos Sprint 8 a crear/completar:
-- backend/routers/admin.py — panel admin con metricas reales
-- backend/routers/feedback.py — endpoint POST /api/feedback
-- backend/scripts/onboard_club.py — script CLI onboarding completo
-- backend/scripts/backup_postgres.py — backup pg_dump a Cloudflare R2
-- backend/tests/locustfile.py — load test Locust
+### Backend API
+- backend/main.py — FastAPI app, CORS, lifespan, routers
+- backend/models.py — 8 modelos SQLAlchemy (+ Feedback, FeedbackCategory)
+- backend/database.py — AsyncEngine, get_db, create_tables, drop_tables
+- backend/routers/analyze.py — POST /api/analyze/match + GET /api/analyze/status/{id}
+- backend/routers/clubs.py — CRUD clubes + Stripe Checkout
+- backend/routers/reports.py — lista + detalle + PDF download
+- backend/routers/admin.py — GET /api/admin/dashboard
+- backend/routers/feedback.py — POST/GET /api/feedback
+- backend/routers/webhooks.py — POST /api/webhooks/stripe (idempotente)
+
+### Servicios
+- backend/services/gemini_service.py — analyze_youtube_video() con cache Redis
+- backend/services/claude_service.py — generate_match_report() Sonnet 4.6
+- backend/services/xg_service.py — modelo xG XGBoost
+- backend/services/visualization_service.py — mplsoccer charts PNG base64
+- backend/services/pdf_service.py — ReportLab PDF con branding RFAF
+- backend/services/email_service.py — Resend email con adjunto PDF
+- backend/services/storage_service.py — Cloudflare R2 (boto3)
+- backend/services/data_service.py — predict_xg, post-procesado shots
+- backend/services/injury_service.py — ACWR injury risk model
+- backend/services/tracking_service.py — PostHog analytics
+
+### Workers
+- backend/workers/tasks.py — analyze_match_task Celery (7 pasos, max_retries=3)
+
+### Scripts operaciones
+- backend/scripts/onboard_club.py — CLI onboarding club nuevo
+- backend/scripts/backup_postgres.py — backup pg_dump -> gzip -> R2
+
+### Tests / QA
+- backend/tests/locustfile.py — load test Locust 20 usuarios
+
+### Frontend
+- frontend/app/page.tsx — landing/dashboard
+- frontend/app/analyze/page.tsx — formulario + polling
+- frontend/app/analyze/[id]/page.tsx — progreso analisis
+- frontend/app/reports/page.tsx — lista informes
+- frontend/app/reports/[id]/page.tsx — informe 12 tabs + chatbot Haiku
 - frontend/app/feedback/page.tsx — formulario feedback beta
+- frontend/lib/api.ts — cliente API tipado
 
 ## Documentacion
 - docs/RFAF_SCRUM_PLAN.md - Plan Scrum completo (8 sprints)

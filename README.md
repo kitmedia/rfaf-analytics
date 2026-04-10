@@ -2,7 +2,7 @@
 
 Plataforma SaaS de análisis táctico de fútbol con IA para la Real Federación Aragonesa de Fútbol (RFAF). Analiza vídeos de YouTube de partidos, genera métricas avanzadas (xG, PPDA, Field Tilt) con modelos propios, crea visualizaciones con mplsoccer y produce informes PDF con Claude Sonnet 4.6.
 
-**Estado:** Sprint 8 en curso · 5 clubes activos · MRR ~651 EUR
+**Estado:** Sprints 1-8 completados · 5 clubes activos · MRR ~651 EUR
 
 ---
 
@@ -213,12 +213,13 @@ docker-compose up -d
 | `POST` | `/api/clubs/{club_id}/checkout` | Crear sesión Stripe Checkout |
 | `POST` | `/api/webhooks/stripe` | Webhook Stripe (idempotente) |
 
-### Admin y monitoring (Sprint 8)
+### Admin y monitoring
 
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
-| `GET` | `/api/admin/dashboard` | MRR, clubes activos, análisis del mes, costes IA |
-| `POST` | `/api/feedback` | Enviar feedback de club beta |
+| `GET` | `/api/admin/dashboard` | MRR real, clubes activos, análisis del mes, costes IA, margen, rating medio |
+| `POST` | `/api/feedback` | Enviar feedback estructurado (categoría + puntuación 1-5 + comentario) |
+| `GET` | `/api/feedback` | Listar feedback, con filtro opcional por `club_id` |
 
 ### Sistema
 
@@ -287,7 +288,7 @@ locust -f backend/tests/locustfile.py --host http://localhost:8000 \
 | Sprint 5 | Stripe webhooks, Cloudflare R2, resumen semanal | ✅ Done |
 | Sprint 6 | Frontend conectado: formulario análisis + polling | ✅ Done |
 | Sprint 7 | Login, mis informes, chatbot táctico, panel admin | ✅ Done |
-| Sprint 8 | Onboarding beta, admin completo, load test, backup | 🔄 En curso |
+| Sprint 8 | Onboarding beta, admin completo, load test, backup | ✅ Done |
 
 ---
 
