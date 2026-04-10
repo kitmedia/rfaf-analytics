@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { getReport, getPdfUrl, type ReportDetail } from "@/lib/api";
+import { trackEvent } from "@/lib/posthog";
 import Markdown from "react-markdown";
 
 export default function ReportPage() {
@@ -19,6 +20,7 @@ export default function ReportPage() {
       try {
         const data = await getReport(id);
         setReport(data);
+        trackEvent("report_viewed", { analysis_id: id, status: data.status });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Error al cargar el informe");
       } finally {

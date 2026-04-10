@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { trackEvent } from "@/lib/posthog";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const DEMO_CLUB_ID = "00000000-0000-0000-0000-000000000001";
@@ -47,6 +48,7 @@ export default function FeedbackPage() {
         throw new Error(data.detail || "Error al enviar feedback");
       }
 
+      trackEvent("feedback_submitted", { category, rating });
       setSubmitted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error inesperado");

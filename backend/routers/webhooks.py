@@ -43,7 +43,7 @@ async def stripe_webhook(
     event_type = event["type"]
     data = event["data"]["object"]
 
-    await logger.ainfo("stripe_webhook_received", event_type=event_type, event_id=event["id"])
+    logger.info("stripe_webhook_received", event_type=event_type, event_id=event["id"])
 
     if event_type == "checkout.session.completed":
         await _handle_checkout_completed(data, db)
@@ -52,7 +52,7 @@ async def stripe_webhook(
     elif event_type == "customer.subscription.deleted":
         await _handle_subscription_deleted(data, db)
     else:
-        await logger.ainfo("stripe_webhook_ignored", event_type=event_type)
+        logger.info("stripe_webhook_ignored", event_type=event_type)
 
     return {"status": "ok"}
 
@@ -65,7 +65,7 @@ async def _handle_checkout_completed(data: dict, db: AsyncSession):
     customer_id = data.get("customer")
 
     if not club_id:
-        await logger.awarn("stripe_webhook_no_club_id", session_id=data.get("id"))
+        logger.warning("stripe_webhook_no_club_id", session_id=data.get("id"))
         return
 
     try:
@@ -87,7 +87,7 @@ async def _handle_checkout_completed(data: dict, db: AsyncSession):
     mrr = PLAN_PRICES.get(plan_type.value, 0.0)
     track_club_subscribed(club_id=club_id, plan=plan_type.value, mrr_eur=mrr)
 
-    await logger.ainfo(
+    logger.info(
         "stripe_subscription_activated",
         club_id=club_id,
         plan=plan_type.value,
@@ -106,7 +106,7 @@ async def _handle_invoice_paid(data: dict, db: AsyncSession):
     )
     club = result.scalar_one_or_none()
     if not club:
-        await logger.awarn("stripe_invoice_unknown_customer", customer_id=customer_id)
+        logger.warning("stripe_invoice_unknown_customer", customer_id=customer_id)
         return
 
     # Reset monthly counter (idempotent — setting to 0 is safe to repeat)
@@ -116,7 +116,7 @@ async def _handle_invoice_paid(data: dict, db: AsyncSession):
         .values(analisis_mes_actual=0, active=True)
     )
 
-    await logger.ainfo(
+    logger.info(
         "stripe_invoice_paid_reset",
         club_id=str(club.id),
         club_name=club.name,
@@ -147,7 +147,7 @@ async def _handle_subscription_deleted(data: dict, db: AsyncSession):
         plan=club.plan.value if hasattr(club.plan, "value") else str(club.plan),
     )
 
-    await logger.ainfo(
+    logger.info(
         "stripe_subscription_cancelled",
         club_id=str(club.id),
         club_name=club.name,

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getAnalysisStatus, type AnalysisStatus } from "@/lib/api";
+import { trackEvent } from "@/lib/posthog";
 
 export default function AnalysisProgressPage() {
   const params = useParams();
@@ -11,20 +12,32 @@ export default function AnalysisProgressPage() {
 
   const [status, setStatus] = useState<AnalysisStatus | null>(null);
   const [error, setError] = useState("");
+  const pollCount = useRef(0);
+  const MAX_POLLS = 200; // ~10 min at 3s interval
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
 
     async function poll() {
+      pollCount.current += 1;
+
+      if (pollCount.current > MAX_POLLS) {
+        setError("El análisis está tardando demasiado. Consulta más tarde.");
+        clearInterval(interval);
+        return;
+      }
+
       try {
         const data = await getAnalysisStatus(id);
         setStatus(data);
 
         if (data.status === "done") {
           clearInterval(interval);
+          trackEvent("analysis_done_viewed", { analysis_id: id });
           setTimeout(() => router.push(`/reports/${id}`), 1500);
         } else if (data.status === "error") {
           clearInterval(interval);
+          trackEvent("analysis_error_viewed", { analysis_id: id });
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Error al consultar estado");

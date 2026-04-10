@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { analyzeMatch } from "@/lib/api";
+import { trackEvent } from "@/lib/posthog";
 
 const DEMO_CLUB_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -27,6 +28,10 @@ export default function AnalyzePage() {
         ...form,
         competicion: form.competicion || undefined,
         club_id: DEMO_CLUB_ID,
+      });
+      trackEvent("analysis_submitted", {
+        equipo_local: form.equipo_local,
+        equipo_visitante: form.equipo_visitante,
       });
       router.push(`/analyze/${result.analysis_id}`);
     } catch (err) {

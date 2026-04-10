@@ -53,7 +53,7 @@ async def generate_match_report(
         user_message += f"- Competición: {competicion}\n"
     user_message += f"\nDatos tácticos del partido (JSON):\n```json\n{_safe_json(tactical_data)}\n```"
 
-    await logger.ainfo(
+    logger.info(
         "claude_call_start",
         model="claude-sonnet-4-6",
         equipo_local=equipo_local,
@@ -79,7 +79,7 @@ async def generate_match_report(
     cost_usd = (input_tokens * 3 / 1_000_000) + (output_tokens * 15 / 1_000_000)
     cost_eur = round(cost_usd * 0.92, 4)
 
-    await logger.ainfo(
+    logger.info(
         "claude_call_done",
         model="claude-sonnet-4-6",
         input_tokens=input_tokens,

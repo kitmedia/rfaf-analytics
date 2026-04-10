@@ -133,7 +133,7 @@ async def analyze_youtube_video(youtube_url: str) -> dict:
     cached = r.get(cache_k)
     if cached:
         duration = time.time() - start_time
-        await logger.ainfo(
+        logger.info(
             "gemini_cache_hit",
             youtube_url=youtube_url,
             duration_s=round(duration, 3),
@@ -147,7 +147,7 @@ async def analyze_youtube_video(youtube_url: str) -> dict:
     genai.configure(api_key=GOOGLE_API_KEY)
     model = genai.GenerativeModel("gemini-2.5-flash")
 
-    await logger.ainfo(
+    logger.info(
         "gemini_call_start",
         youtube_url=youtube_url,
         model="gemini-2.5-flash",
@@ -181,7 +181,7 @@ async def analyze_youtube_video(youtube_url: str) -> dict:
     try:
         tactical_data = json.loads(raw_text)
     except json.JSONDecodeError:
-        await logger.aerror(
+        logger.error(
             "gemini_json_parse_error",
             youtube_url=youtube_url,
             raw_response_preview=raw_text[:500],
@@ -192,7 +192,7 @@ async def analyze_youtube_video(youtube_url: str) -> dict:
     required_keys = {"shots", "passes_network", "pressing"}
     missing = required_keys - set(tactical_data.keys())
     if missing:
-        await logger.awarn(
+        logger.warning(
             "gemini_missing_keys",
             youtube_url=youtube_url,
             missing_keys=list(missing),
@@ -204,7 +204,7 @@ async def analyze_youtube_video(youtube_url: str) -> dict:
     # Cache result in Redis for 30 days
     r.setex(cache_k, CACHE_TTL_SECONDS, json.dumps(tactical_data, ensure_ascii=False))
 
-    await logger.ainfo(
+    logger.info(
         "gemini_call_done",
         youtube_url=youtube_url,
         model="gemini-2.5-flash",
