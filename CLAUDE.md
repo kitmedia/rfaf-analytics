@@ -97,15 +97,29 @@ npm run test:e2e  # Playwright e2e tests
 - **Dark Mode:** Tailwind @custom-variant dark + ThemeToggle component.
 - **xG Model:** XGBoost trained on StatsBomb La Liga data. Auto-trains on first use if missing.
 
-## API Docs
+## API Docs (disabled in production)
 
-- Swagger UI: `/api/docs`
-- ReDoc: `/api/redoc`
-- OpenAPI JSON: `/api/openapi.json`
+- Swagger UI: `/api/docs` (dev/staging only)
+- ReDoc: `/api/redoc` (dev/staging only)
+- OpenAPI JSON: `/api/openapi.json` (dev/staging only)
 
 ## Project Status
 
-All 9 sprints completed (40/40 user stories, 223 story points) plus P0/P1/P2 production hardening.
+All 9 sprints completed (40/40 user stories, 223 story points) plus P0/P1/P2 production hardening + comprehensive admin panel + deploy guide.
+
+### Production Hardening
+- JWT_SECRET crashes if missing in production (no insecure defaults)
+- Alembic migrations fail-fast (no silent fallback)
+- Flower removed from Procfile (security)
+- Dockerfile: non-root user + .dockerignore
+- OpenAPI docs disabled in production (`ENVIRONMENT=production`)
+- Uvicorn multi-worker (`WEB_CONCURRENCY` env var)
+- Celery beat combined into worker process
+
+### Deploy
+- **Guide:** `docs/GUIA_DEPLOY.md` — Railway + Vercel step-by-step
+- **Cost:** ~$20-60/mes (Railway Pro + Vercel Hobby)
+- **Required env vars:** see `.env.example`
 
 ### Frontend Pages
 | Route | Description | Auth |
@@ -122,7 +136,13 @@ All 9 sprints completed (40/40 user stories, 223 story points) plus P0/P1/P2 pro
 | `/reports/[id]` | Full report (12 tabs + chatbot) | Protected |
 | `/feedback` | Beta feedback form | Protected |
 | `/settings` | Change password, account info | Protected |
-| `/admin` | Admin dashboard (MRR, costs) | Protected |
+| `/admin` | Admin dashboard (MRR, costs) | Admin only |
+| `/admin/clubs` | Club CRUD + onboard | Admin only |
+| `/admin/users` | User management + password reset | Admin only |
+| `/admin/analyses` | Analysis monitoring + retry | Admin only |
+| `/admin/tasks` | Celery task monitor (live) | Admin only |
+| `/admin/operations` | Backups + xG model training | Admin only |
+| `/admin/feedback-admin` | Feedback overview | Admin only |
 
 ### Backend Endpoints
 | Method | Path | Description |
@@ -144,6 +164,23 @@ All 9 sprints completed (40/40 user stories, 223 story points) plus P0/P1/P2 pro
 | POST | `/api/clubs/{id}/checkout` | Stripe Checkout |
 | POST | `/api/clubs/{id}/portal` | Stripe billing portal |
 | GET | `/api/admin/dashboard` | Admin metrics |
+| GET | `/api/admin/clubs` | List clubs (paginated) |
+| POST | `/api/admin/clubs` | Onboard club + admin user |
+| PUT | `/api/admin/clubs/{id}` | Update club |
+| PATCH | `/api/admin/clubs/{id}/toggle` | Toggle active |
+| GET | `/api/admin/users` | List users (filter by club) |
+| POST | `/api/admin/users` | Create user |
+| PUT | `/api/admin/users/{id}` | Update user |
+| POST | `/api/admin/users/{id}/reset-password` | Admin reset password |
+| GET | `/api/admin/analyses` | List analyses (filter status/club) |
+| POST | `/api/admin/analyses/{id}/retry` | Retry failed analysis |
+| GET | `/api/admin/tasks` | Celery inspect (active/reserved/scheduled) |
+| GET | `/api/admin/tasks/{id}` | Celery task status |
+| POST | `/api/admin/backups/trigger` | Trigger DB backup to R2 |
+| GET | `/api/admin/backups` | List backups in R2 |
+| POST | `/api/admin/ml/train-xg` | Trigger xG model retrain |
+| GET | `/api/admin/ml/status` | xG model file status |
+| GET | `/api/admin/feedbacks` | List all feedback (paginated) |
 | POST | `/api/feedback` | Submit feedback |
 | GET | `/api/feedback` | List feedback |
 | POST | `/api/webhooks/stripe` | Stripe webhooks |
