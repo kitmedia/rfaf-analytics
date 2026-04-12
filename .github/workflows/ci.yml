@@ -54,6 +54,7 @@ jobs:
       ANTHROPIC_API_KEY: sk-ant-test
       GOOGLE_API_KEY: test
       POSTHOG_API_KEY: phc_test
+      JWT_SECRET: ci-test-secret-not-used-in-production-change-me
 
     steps:
       - uses: actions/checkout@v4
@@ -75,7 +76,7 @@ jobs:
           curl -f http://localhost:8000/api/health
 
       - name: Run tests
-        run: python -m pytest backend/tests/test_endpoints.py -v --tb=short
+        run: python -m pytest backend/tests/test_endpoints.py backend/tests/test_auth.py -v --tb=short
 
   frontend:
     runs-on: ubuntu-latest
