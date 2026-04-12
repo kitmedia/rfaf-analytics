@@ -155,3 +155,249 @@ export async function chatAboutReport(
     body: JSON.stringify({ question, club_id: clubId }),
   });
 }
+
+// ─── Admin API ───────────────────────────────────────────────────────────────
+
+async function fetchAdminAPI<T>(path: string, options?: RequestInit): Promise<T> {
+  const { getToken } = await import("@/lib/auth");
+  const token = getToken();
+  return fetchAPI(path, {
+    ...options,
+    headers: { ...options?.headers, Authorization: `Bearer ${token}` },
+  });
+}
+
+// --- Admin Types ---
+
+export interface AdminClubItem {
+  id: string;
+  name: string;
+  email: string;
+  plan: string;
+  active: boolean;
+  user_count: number;
+  analysis_count: number;
+  analisis_mes_actual: number;
+  created_at: string;
+}
+
+export interface AdminUserItem {
+  id: string;
+  club_id: string;
+  club_name: string;
+  email: string;
+  name: string;
+  role: string;
+  created_at: string;
+}
+
+export interface AdminAnalysisItem {
+  id: string;
+  club_id: string;
+  club_name: string;
+  equipo_local: string;
+  equipo_visitante: string;
+  status: string;
+  progress_pct: number;
+  current_step: string | null;
+  cost_gemini: number | null;
+  cost_claude: number | null;
+  duration_s: number | null;
+  created_at: string;
+}
+
+export interface AdminFeedbackItem {
+  id: string;
+  club_id: string;
+  club_name: string;
+  category: string;
+  rating: number;
+  comment: string;
+  created_at: string;
+}
+
+export interface CeleryTaskInfo {
+  id: string;
+  name: string;
+  args: string;
+  worker: string;
+}
+
+export interface BackupInfo {
+  key: string;
+  size_bytes: number;
+  last_modified: string;
+}
+
+export interface MlModelStatus {
+  exists: boolean;
+  path: string;
+  size_bytes: number | null;
+  last_modified: string | null;
+  metrics?: { brier_score: number; auc: number } | null;
+}
+
+// --- Admin Functions ---
+
+export async function listAdminClubs(): Promise<{ clubs: AdminClubItem[]; total: number }> {
+  const data = await fetchAdminAPI<{ items: AdminClubItem[]; total: number }>("/api/admin/clubs");
+  return { clubs: data.items, total: data.total };
+}
+
+export async function onboardClub(data: {
+  club_name: string;
+  email: string;
+  plan: string;
+  admin_name: string;
+  admin_password: string;
+}): Promise<AdminClubItem> {
+  return fetchAdminAPI("/api/admin/clubs", {
+    method: "POST",
+    body: JSON.stringify({
+      club_name: data.club_name,
+      club_email: data.email,
+      plan: data.plan,
+      admin_name: data.admin_name,
+      admin_email: data.email,
+      admin_password: data.admin_password,
+    }),
+  });
+}
+
+export async function updateClub(
+  clubId: string,
+  data: Partial<{ name: string; email: string; plan: string }>,
+): Promise<AdminClubItem> {
+  return fetchAdminAPI(`/api/admin/clubs/${clubId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function toggleClub(clubId: string): Promise<{ active: boolean }> {
+  const result = await fetchAdminAPI<AdminClubItem>(
+    `/api/admin/clubs/${clubId}/toggle`,
+    { method: "PATCH" },
+  );
+  return { active: result.active };
+}
+
+export async function listAdminUsers(
+  clubId?: string,
+): Promise<{ users: AdminUserItem[]; total: number }> {
+  const qs = clubId ? `?club_id=${clubId}` : "";
+  const data = await fetchAdminAPI<{ items: AdminUserItem[]; total: number }>(`/api/admin/users${qs}`);
+  return { users: data.items, total: data.total };
+}
+
+export async function createAdminUser(data: {
+  club_id: string;
+  name: string;
+  email: string;
+  password: string;
+  role: string;
+}): Promise<AdminUserItem> {
+  return fetchAdminAPI("/api/admin/users", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateAdminUser(
+  userId: string,
+  data: Partial<{ name: string; email: string; role: string }>,
+): Promise<AdminUserItem> {
+  return fetchAdminAPI(`/api/admin/users/${userId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function resetAdminUserPassword(
+  userId: string,
+): Promise<{ temporary_password: string }> {
+  const data = await fetchAdminAPI<{ user_id: string; temp_password: string; message: string }>(
+    `/api/admin/users/${userId}/reset-password`,
+    { method: "POST" },
+  );
+  return { temporary_password: data.temp_password };
+}
+
+export async function listAdminAnalyses(
+  status?: string,
+  clubId?: string,
+  page?: number,
+): Promise<{ analyses: AdminAnalysisItem[]; total: number; page: number }> {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (clubId) params.set("club_id", clubId);
+  if (page) params.set("page", String(page));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const data = await fetchAdminAPI<{ items: AdminAnalysisItem[]; total: number; page: number }>(
+    `/api/admin/analyses${qs}`,
+  );
+  return { analyses: data.items, total: data.total, page: data.page };
+}
+
+export async function retryAnalysis(analysisId: string): Promise<{ task_id: string }> {
+  return fetchAdminAPI(`/api/admin/analyses/${analysisId}/retry`, { method: "POST" });
+}
+
+export async function listCeleryTasks(): Promise<{
+  active: CeleryTaskInfo[];
+  reserved: CeleryTaskInfo[];
+  scheduled: CeleryTaskInfo[];
+}> {
+  // Backend returns raw Celery inspect dicts { worker_name: [...tasks] }
+  // Flatten into arrays for the frontend
+  const data = await fetchAdminAPI<{
+    active: Record<string, CeleryTaskInfo[]>;
+    reserved: Record<string, CeleryTaskInfo[]>;
+    scheduled: Record<string, CeleryTaskInfo[]>;
+  }>("/api/admin/tasks");
+  return {
+    active: Object.values(data.active).flat(),
+    reserved: Object.values(data.reserved).flat(),
+    scheduled: Object.values(data.scheduled).flat(),
+  };
+}
+
+export async function getCeleryTask(
+  taskId: string,
+): Promise<{ id: string; status: string; result: unknown }> {
+  const data = await fetchAdminAPI<{ task_id: string; status: string; result: string | null; traceback: string | null }>(
+    `/api/admin/tasks/${taskId}`,
+  );
+  return { id: data.task_id, status: data.status, result: data.result };
+}
+
+export async function triggerBackup(): Promise<{ task_id: string }> {
+  return fetchAdminAPI("/api/admin/backups/trigger", { method: "POST" });
+}
+
+export async function listBackups(): Promise<BackupInfo[]> {
+  const data = await fetchAdminAPI<{ items: BackupInfo[]; total: number }>("/api/admin/backups");
+  return data.items;
+}
+
+export async function triggerXgTraining(): Promise<{ task_id: string }> {
+  return fetchAdminAPI("/api/admin/ml/train-xg", { method: "POST" });
+}
+
+export async function getXgModelStatus(): Promise<MlModelStatus> {
+  return fetchAdminAPI("/api/admin/ml/status");
+}
+
+export async function listAdminFeedbacks(
+  clubId?: string,
+  category?: string,
+): Promise<{ feedbacks: AdminFeedbackItem[]; total: number }> {
+  const params = new URLSearchParams();
+  if (clubId) params.set("club_id", clubId);
+  if (category) params.set("category", category);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const data = await fetchAdminAPI<{ items: AdminFeedbackItem[]; total: number }>(
+    `/api/admin/feedbacks${qs}`,
+  );
+  return { feedbacks: data.items, total: data.total };
+}

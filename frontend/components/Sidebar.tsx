@@ -13,14 +13,18 @@ export default function Sidebar() {
 
   const auth = getAuth();
 
-  const links = [
+  const baseLinks = [
     { href: "/", label: "Dashboard", icon: "📊" },
     { href: "/analyze", label: "Nuevo análisis", icon: "🎬" },
     { href: "/reports", label: "Informes", icon: "📄" },
     { href: "/feedback", label: "Feedback", icon: "💬" },
     { href: "/settings", label: "Configuracion", icon: "⚙️" },
-    { href: "/admin", label: "Admin RFAF", icon: "🛡️" },
   ];
+
+  const links =
+    auth?.role === "admin"
+      ? [...baseLinks, { href: "/admin", label: "Admin RFAF", icon: "🛡️" }]
+      : baseLinks;
 
   return (
     <aside className="w-64 bg-indigo-950 text-white flex flex-col fixed h-full">

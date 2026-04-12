@@ -5,6 +5,7 @@ export interface AuthData {
   club_id: string;
   club_name: string;
   user_name: string;
+  role: string;
   plan: string;
   expires_in: number;
 }

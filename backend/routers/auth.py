@@ -38,6 +38,7 @@ class LoginResponse(BaseModel):
     club_id: str
     club_name: str
     user_name: str
+    role: str
     plan: str
     expires_in: int
 
@@ -136,6 +137,7 @@ async def register(
         club_id=str(club.id),
         club_name=club.name,
         user_name=user.name,
+        role=user.role.value,
         plan=club.plan.value,
         expires_in=expires_in,
     )
@@ -176,6 +178,7 @@ async def login(
         club_id=str(club.id),
         club_name=club.name,
         user_name=user.name,
+        role=role,
         plan=plan,
         expires_in=expires_in,
     )

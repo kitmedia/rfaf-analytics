@@ -339,6 +339,35 @@ def weekly_digest_task():
     logger.info("weekly_digest_done", total_clubs=len(clubs))
 
 
+# --- Operations tasks (admin panel) ---
+
+
+@app.task(name="backup_postgres", bind=True, max_retries=1)
+def backup_postgres_task(self):
+    """Trigger PostgreSQL backup to R2. Called from admin panel."""
+    try:
+        from backend.scripts.backup_postgres import backup_postgres
+        result = backup_postgres()
+        logger.info("backup_postgres_done", result=result)
+        return {"status": "ok", "result": str(result)}
+    except Exception as exc:
+        logger.error("backup_postgres_failed", error=str(exc))
+        raise self.retry(exc=exc, countdown=60)
+
+
+@app.task(name="train_xg_model", bind=True, max_retries=0)
+def train_xg_model_task(self):
+    """Train xG model from StatsBomb data. Called from admin panel."""
+    try:
+        from backend.services.data_service import train_rfaf_xg_model
+        metrics = train_rfaf_xg_model()
+        logger.info("train_xg_model_done", **metrics)
+        return {"status": "ok", "metrics": metrics}
+    except Exception as exc:
+        logger.error("train_xg_model_failed", error=str(exc))
+        return {"status": "error", "error": str(exc)}
+
+
 # Celery beat schedule (PDF-05)
 from celery.schedules import crontab
 
