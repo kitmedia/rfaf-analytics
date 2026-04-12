@@ -22,7 +22,13 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/auth", tags=["auth"])
 limiter = Limiter(key_func=get_remote_address)
 
-JWT_SECRET = os.getenv("JWT_SECRET", "cambiar-en-produccion")
+JWT_SECRET = os.getenv("JWT_SECRET", "")
+if not JWT_SECRET:
+    import warnings
+    if os.getenv("ENVIRONMENT", "development") == "production":
+        raise RuntimeError("JWT_SECRET no esta configurado. Imposible arrancar en produccion.")
+    JWT_SECRET = "dev-only-insecure-secret-do-not-use-in-production"
+    warnings.warn("JWT_SECRET no configurado. Usando secreto de desarrollo inseguro.", stacklevel=2)
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_HOURS = 24
 

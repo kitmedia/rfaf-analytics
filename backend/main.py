@@ -39,8 +39,11 @@ if SENTRY_DSN:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: create tables + init tracking. Shutdown: flush PostHog."""
-    await create_tables()
+    """Startup: init tracking. Shutdown: flush PostHog."""
+    # En produccion, Alembic gestiona las migraciones via start.sh.
+    # create_tables() solo como fallback en desarrollo local.
+    if os.getenv("ENVIRONMENT", "development") != "production":
+        await create_tables()
     logger.info("rfaf_startup", version="2.0.0")
     yield
     # Flush PostHog events on shutdown
@@ -67,9 +70,9 @@ app = FastAPI(
         "Incluye el header `Authorization: Bearer <token>` en cada request protegido."
     ),
     lifespan=lifespan,
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json",
+    docs_url="/api/docs" if os.getenv("ENVIRONMENT") != "production" else None,
+    redoc_url="/api/redoc" if os.getenv("ENVIRONMENT") != "production" else None,
+    openapi_url="/api/openapi.json" if os.getenv("ENVIRONMENT") != "production" else None,
     openapi_tags=[
         {"name": "auth", "description": "Autenticacion: login, registro, password reset"},
         {"name": "analyze", "description": "Analisis de partidos via YouTube URL"},
@@ -85,7 +88,7 @@ app = FastAPI(
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=["60/minute"],
-    storage_uri=os.getenv("REDIS_URL", "redis://redis:6379/0"),
+    storage_uri=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
 )
 app.state.limiter = limiter
 
