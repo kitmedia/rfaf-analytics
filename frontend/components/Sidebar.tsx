@@ -7,7 +7,8 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   // Don't show sidebar on public pages
-  if (["/login", "/signup", "/pricing"].includes(pathname)) return null;
+  const publicPaths = ["/login", "/signup", "/pricing", "/forgot-password", "/reset-password"];
+  if (publicPaths.includes(pathname)) return null;
 
   const auth = getAuth();
 

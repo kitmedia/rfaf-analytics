@@ -1,20 +1,23 @@
-"""Router: /api/auth — Login JWT + token verification."""
+"""Router: /api/auth — Login, register, password reset, JWT verification."""
 
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
 from jose import JWTError, jwt
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from passlib.hash import bcrypt
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.models import Club, User
+
+logger = structlog.get_logger()
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 limiter = Limiter(key_func=get_remote_address)
@@ -186,3 +189,88 @@ async def get_me(user: TokenPayload = Depends(get_current_user)):
         "club_id": user.club_id,
         "role": user.role,
     }
+
+
+# --- Password Reset ---
+
+RESET_TOKEN_EXPIRE_HOURS = 1
+
+
+def _create_reset_token(user_id: str) -> str:
+    """Create a short-lived JWT for password reset."""
+    expire = datetime.now(timezone.utc) + timedelta(hours=RESET_TOKEN_EXPIRE_HOURS)
+    return jwt.encode(
+        {"sub": user_id, "purpose": "reset", "exp": expire},
+        JWT_SECRET,
+        algorithm=JWT_ALGORITHM,
+    )
+
+
+def _verify_reset_token(token: str) -> str:
+    """Verify reset token, return user_id."""
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get("purpose") != "reset":
+            raise JWTError("Not a reset token")
+        return payload["sub"]
+    except JWTError:
+        raise HTTPException(status_code=400, detail="Enlace de recuperacion invalido o expirado.")
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+@router.post("/forgot-password")
+@limiter.limit("3/minute")
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    req: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Send password reset email. Always returns 200 (no email enumeration)."""
+    result = await db.execute(select(User).where(User.email == request.email))
+    user = result.scalar_one_or_none()
+
+    if user:
+        reset_token = _create_reset_token(str(user.id))
+        reset_url = os.getenv(
+            "FRONTEND_URL", "https://rfaf-analytics.es"
+        ) + f"/reset-password?token={reset_token}"
+
+        try:
+            from backend.services.email_service import send_password_reset_email
+            send_password_reset_email(request.email, reset_url)
+        except Exception as exc:
+            logger.warning("password_reset_email_failed", error=str(exc))
+
+    # Always 200 to prevent email enumeration
+    return {"message": "Si el email existe, recibiras un enlace de recuperacion."}
+
+
+@router.post("/reset-password")
+@limiter.limit("5/minute")
+async def reset_password(
+    request: ResetPasswordRequest,
+    req: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Reset password using token from email."""
+    user_id = _verify_reset_token(request.token)
+
+    if len(request.new_password) < 8:
+        raise HTTPException(status_code=400, detail="La contrasena debe tener al menos 8 caracteres.")
+
+    new_hash = bcrypt.hash(request.new_password)
+    await db.execute(
+        update(User).where(User.id == uuid.UUID(user_id)).values(password_hash=new_hash)
+    )
+    await db.commit()
+
+    logger.info("password_reset_success", user_id=user_id)
+    return {"message": "Contrasena actualizada correctamente. Ya puedes iniciar sesion."}

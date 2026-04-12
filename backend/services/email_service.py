@@ -130,3 +130,42 @@ def send_report_email(
     except Exception as e:
         logger.error("email_error", type="report_ready", to=to_email, error=str(e))
         return False
+
+
+def send_password_reset_email(to_email: str, reset_url: str) -> bool:
+    """Send password reset link."""
+    if not RESEND_API_KEY:
+        logger.warn("resend_api_key_missing", msg="Email no enviado")
+        return False
+
+    resend.api_key = RESEND_API_KEY
+
+    html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #1a237e;">Recuperar contrasena</h2>
+        <p>Hemos recibido una solicitud para restablecer tu contrasena en RFAF Analytics.</p>
+        <a href="{reset_url}" style="display: inline-block; background: #1a237e; color: white;
+           padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;
+           margin: 15px 0;">
+            Restablecer contrasena
+        </a>
+        <p style="color: #666; font-size: 14px;">
+            Este enlace expira en 1 hora. Si no solicitaste este cambio, ignora este email.
+        </p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="color: #999; font-size: 12px;">RFAF Analytics Platform</p>
+    </div>
+    """
+
+    try:
+        resend.Emails.send({
+            "from": FROM_EMAIL,
+            "to": [to_email],
+            "subject": "Recuperar contrasena - RFAF Analytics",
+            "html": html,
+        })
+        logger.info("email_sent", type="password_reset", to=to_email)
+        return True
+    except Exception as e:
+        logger.error("email_error", type="password_reset", to=to_email, error=str(e))
+        return False
