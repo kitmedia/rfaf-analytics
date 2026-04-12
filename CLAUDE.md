@@ -86,8 +86,13 @@ npm run lint
 - **Payments:** Stripe Checkout con webhooks idempotentes (signature verified). Planes: Básico (49€), Profesional (149€), Federado (104€).
 - **Storage:** PDFs en Cloudflare R2 via boto3 (S3-compatible).
 - **Email:** Resend — envía PDF automáticamente al completar análisis.
-- **Monitoring:** Sentry + PostHog (8 tracked events) + structlog.
+- **Monitoring:** Sentry SDK (FastAPI+SQLAlchemy+Celery integrations) + PostHog (8 tracked events) + structlog.
 - **CI:** GitHub Actions — ruff lint → pytest (with Postgres+Redis services) → frontend build.
+- **Billing Portal:** Stripe billing portal for subscription self-service (`POST /api/clubs/{id}/portal`).
+
+## Sprint Status
+
+All 9 sprints completed (40/40 user stories). See `.claude/worktrees/zen-mestorf/CLAUDE.md` for detailed sprint history.
 
 ## Frontend Note
 
