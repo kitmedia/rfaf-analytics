@@ -5,14 +5,16 @@ import uuid
 
 import anthropic
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
+from backend.limiter import limiter
 from backend.models import AnalysisStatus, Match, MatchAnalysis
+from backend.routers.auth import TokenPayload, get_current_user
 from backend.services.pdf_service import generate_pdf
 from backend.services.tracking_service import (
     track_chatbot_query,
@@ -60,10 +62,11 @@ class ReportDetail(BaseModel):
 
 @router.get("", response_model=list[ReportSummary])
 async def list_reports(
-    club_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
 ):
-    """Lista todos los informes de un club."""
+    """Lista todos los informes del club autenticado."""
+    club_id = uuid.UUID(current_user.club_id)
     result = await db.execute(
         select(MatchAnalysis, Match)
         .join(Match, MatchAnalysis.match_id == Match.id)
@@ -91,12 +94,16 @@ async def list_reports(
 async def get_report(
     analysis_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
 ):
     """Obtiene un informe completo por ID."""
     result = await db.execute(
         select(MatchAnalysis, Match)
         .join(Match, MatchAnalysis.match_id == Match.id)
-        .where(MatchAnalysis.id == analysis_id)
+        .where(
+            MatchAnalysis.id == analysis_id,
+            MatchAnalysis.club_id == uuid.UUID(current_user.club_id),
+        )
     )
     row = result.one_or_none()
 
@@ -132,12 +139,16 @@ async def get_report(
 async def download_report_pdf(
     analysis_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
 ):
     """Descarga el informe en formato PDF."""
     result = await db.execute(
         select(MatchAnalysis, Match)
         .join(Match, MatchAnalysis.match_id == Match.id)
-        .where(MatchAnalysis.id == analysis_id)
+        .where(
+            MatchAnalysis.id == analysis_id,
+            MatchAnalysis.club_id == uuid.UUID(current_user.club_id),
+        )
     )
     row = result.one_or_none()
 
@@ -190,17 +201,20 @@ class ChatResponse(BaseModel):
 
 
 @router.post("/{analysis_id}/chat", response_model=ChatResponse)
+@limiter.limit("20/minute")
 async def chat_about_report(
+    http_request: Request,
     analysis_id: uuid.UUID,
     request: ChatRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
 ):
     """Chatbot táctico con Haiku — responde preguntas sobre un informe específico."""
     result = await db.execute(
         select(MatchAnalysis, Match)
         .join(Match, MatchAnalysis.match_id == Match.id)
         .where(MatchAnalysis.id == analysis_id)
-        .where(MatchAnalysis.club_id == request.club_id)
+        .where(MatchAnalysis.club_id == uuid.UUID(current_user.club_id))
     )
     row = result.one_or_none()
 
@@ -237,7 +251,7 @@ async def chat_about_report(
     answer = response.content[0].text
 
     track_chatbot_query(
-        club_id=str(request.club_id),
+        club_id=current_user.club_id,
         analysis_id=str(analysis_id),
         query_length=len(request.question),
     )
@@ -245,7 +259,7 @@ async def chat_about_report(
     logger.info(
         "chatbot_query",
         analysis_id=str(analysis_id),
-        club_id=str(request.club_id),
+        club_id=current_user.club_id,
         query_length=len(request.question),
         answer_length=len(answer),
         model="claude-haiku-4-5-20251001",

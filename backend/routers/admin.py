@@ -1,6 +1,6 @@
 """Router: /api/admin — panel admin con métricas reales."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +13,7 @@ from backend.models import (
     MatchAnalysis,
     PlanType,
 )
+from backend.routers.auth import TokenPayload, get_current_user
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -41,8 +42,13 @@ class AdminDashboard(BaseModel):
 
 
 @router.get("/dashboard", response_model=AdminDashboard)
-async def admin_dashboard(db: AsyncSession = Depends(get_db)):
+async def admin_dashboard(
+    db: AsyncSession = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+):
     """Panel admin: MRR real, costes IA, alertas, clubes activos."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Acceso restringido a administradores.")
 
     # Clubs
     clubs_result = await db.execute(select(Club))

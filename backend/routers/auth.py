@@ -4,6 +4,7 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
 from jose import JWTError, jwt
 from passlib.hash import bcrypt
@@ -12,11 +13,20 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
-from backend.models import Club, User
+from backend.limiter import limiter
+from backend.models import Club, PlanType, User, UserRole
+
+logger = structlog.get_logger()
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-JWT_SECRET = os.getenv("JWT_SECRET", "cambiar-en-produccion")
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    raise RuntimeError(
+        "JWT_SECRET no está configurado. "
+        "La aplicación no puede arrancar sin una clave secreta segura. "
+        "Establece la variable de entorno JWT_SECRET."
+    )
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_HOURS = 24
 
@@ -85,15 +95,17 @@ async def get_current_club_id(user: TokenPayload = Depends(get_current_user)) ->
 
 
 @router.post("/login", response_model=LoginResponse)
+@limiter.limit("5/minute")
 async def login(
-    request: LoginRequest,
+    request: Request,
+    body: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
     """Authenticate user with email/password. Returns JWT token."""
-    result = await db.execute(select(User).where(User.email == request.email))
+    result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
 
-    if not user or not bcrypt.verify(request.password, user.password_hash):
+    if not user or not bcrypt.verify(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Email o contraseña incorrectos.")
 
     # Get club info
@@ -130,3 +142,75 @@ async def get_me(user: TokenPayload = Depends(get_current_user)):
         "club_id": user.club_id,
         "role": user.role,
     }
+
+
+class RegisterRequest(BaseModel):
+    club_name: str
+    email: EmailStr
+    password: str
+    name: str
+    plan: str = "BASICO"
+
+
+@router.post("/register", response_model=LoginResponse, status_code=201)
+async def register(
+    request: RegisterRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Registra un nuevo club con su primer usuario administrador. Devuelve JWT."""
+    # Validate plan
+    try:
+        plan = PlanType(request.plan.upper())
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Plan no válido. Opciones: {[p.value for p in PlanType]}",
+        )
+
+    # Check duplicate email
+    existing = await db.execute(select(User).where(User.email == request.email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Ya existe una cuenta con ese email.")
+
+    # Create Club
+    club = Club(
+        name=request.club_name,
+        email=request.email,
+        plan=plan,
+        active=True,
+    )
+    db.add(club)
+    await db.flush()
+
+    # Create admin User
+    user = User(
+        club_id=club.id,
+        email=request.email,
+        password_hash=bcrypt.hash(request.password),
+        name=request.name,
+        role=UserRole.ADMIN,
+    )
+    db.add(user)
+    await db.flush()
+
+    token, expires_in = _create_token(
+        user_id=str(user.id),
+        club_id=str(club.id),
+        role=UserRole.ADMIN.value,
+    )
+
+    logger.info(
+        "club_registered",
+        club_id=str(club.id),
+        club_name=request.club_name,
+        plan=plan.value,
+    )
+
+    return LoginResponse(
+        access_token=token,
+        club_id=str(club.id),
+        club_name=club.name,
+        user_name=user.name,
+        plan=plan.value,
+        expires_in=expires_in,
+    )

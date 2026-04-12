@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.models import Club, PlanType
+from backend.routers.auth import TokenPayload, get_current_user
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/clubs", tags=["clubs"])
@@ -63,8 +64,11 @@ class CheckoutResponse(BaseModel):
 async def get_club(
     club_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
 ):
     """Obtiene datos de un club."""
+    if str(club_id) != current_user.club_id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="No tienes permiso para ver este club.")
     result = await db.execute(select(Club).where(Club.id == club_id))
     club = result.scalar_one_or_none()
 
@@ -124,7 +128,10 @@ class PortalResponse(BaseModel):
 async def create_portal_session(
     club_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
 ):
+    if str(club_id) != current_user.club_id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="No tienes permiso para gestionar este club.")
     """Crea una sesión del portal de facturación de Stripe (PAY-03).
 
     Permite al club gestionar su suscripción, métodos de pago y facturas.
@@ -165,8 +172,11 @@ async def create_checkout_session(
     club_id: uuid.UUID,
     request: CheckoutRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
 ):
     """Crea una sesión de Stripe Checkout para el club."""
+    if str(club_id) != current_user.club_id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="No tienes permiso para gestionar este club.")
     if not STRIPE_SECRET_KEY:
         raise HTTPException(status_code=500, detail="Stripe no configurado.")
 

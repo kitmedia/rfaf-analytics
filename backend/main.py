@@ -4,10 +4,14 @@ import os
 from contextlib import asynccontextmanager
 
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 
 from backend.database import create_tables
+from backend.limiter import limiter
 
 logger = structlog.get_logger()
 
@@ -52,6 +56,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# --- Rate limiting ---
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 ALLOWED_ORIGINS = os.getenv(
     "ALLOWED_ORIGINS",
     "http://localhost:3000,https://rfaf-analytics.es,https://www.rfaf-analytics.es",
@@ -64,6 +72,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# --- Global exception handler ---
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Catch unhandled exceptions. Log full details, return safe Spanish message."""
+    logger.error(
+        "unhandled_exception",
+        path=str(request.url.path),
+        method=request.method,
+        error=str(exc),
+        exc_info=True,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Ha ocurrido un error interno. Por favor, inténtalo de nuevo más tarde."},
+    )
 
 
 @app.get("/api/health")

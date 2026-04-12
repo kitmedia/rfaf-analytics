@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.models import Club, Feedback, FeedbackCategory
+from backend.routers.auth import TokenPayload, get_current_user
 from backend.services.tracking_service import track_feedback_submitted
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
@@ -56,8 +57,12 @@ class FeedbackListResponse(BaseModel):
 async def create_feedback(
     request: FeedbackRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
 ):
     """Enviar feedback estructurado."""
+    if str(request.club_id) != current_user.club_id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="No puedes enviar feedback en nombre de otro club.")
+
     result = await db.execute(select(Club).where(Club.id == request.club_id))
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Club no encontrado.")
@@ -90,13 +95,13 @@ async def create_feedback(
 
 @router.get("", response_model=FeedbackListResponse)
 async def list_feedback(
-    club_id: uuid.UUID | None = None,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
 ):
-    """Listar feedback. Opcionalmente filtrar por club."""
+    """Listar feedback del club autenticado (admins ven todo)."""
     query = select(Feedback).order_by(Feedback.created_at.desc())
-    if club_id:
-        query = query.where(Feedback.club_id == club_id)
+    if current_user.role != "admin":
+        query = query.where(Feedback.club_id == uuid.UUID(current_user.club_id))
 
     result = await db.execute(query)
     feedbacks = result.scalars().all()

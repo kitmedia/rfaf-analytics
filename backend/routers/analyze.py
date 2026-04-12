@@ -3,13 +3,15 @@
 import re
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
+from backend.limiter import limiter
 from backend.models import AnalysisStatus, Club, Match, MatchAnalysis, PlanType
+from backend.routers.auth import TokenPayload, get_current_user
 from backend.services.tracking_service import track_analysis_started
 from backend.workers.tasks import analyze_match_task
 
@@ -69,11 +71,17 @@ class AnalysisStatusResponse(BaseModel):
 
 
 @router.post("/match", response_model=AnalyzeMatchResponse)
+@limiter.limit("10/minute")
 async def analyze_match(
+    http_request: Request,
     request: AnalyzeMatchRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
 ):
     """Encola análisis de partido. Devuelve analysis_id inmediatamente."""
+    # Verify the club_id in the request matches the authenticated user's club
+    if str(request.club_id) != current_user.club_id:
+        raise HTTPException(status_code=403, detail="No tienes permiso para analizar partidos de este club.")
 
     # Check club exists and plan limits
     result = await db.execute(select(Club).where(Club.id == request.club_id))
@@ -147,10 +155,14 @@ async def analyze_match(
 async def get_analysis_status(
     analysis_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
 ):
     """Consulta el estado de un análisis en curso."""
     result = await db.execute(
-        select(MatchAnalysis).where(MatchAnalysis.id == analysis_id)
+        select(MatchAnalysis).where(
+            MatchAnalysis.id == analysis_id,
+            MatchAnalysis.club_id == uuid.UUID(current_user.club_id),
+        )
     )
     analysis = result.scalar_one_or_none()
 
