@@ -52,8 +52,33 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="RFAF Analytics Platform",
     version="2.0.0",
-    description="Plataforma SaaS de analisis tactico de futbol con IA",
+    description=(
+        "Plataforma SaaS de analisis tactico de futbol con IA para la "
+        "Real Federacion Aragonesa de Futbol (RFAF).\n\n"
+        "## Funcionalidades\n"
+        "- Analisis de video YouTube con Gemini 2.5 Flash\n"
+        "- Metricas xG, PPDA, Field Tilt con XGBoost\n"
+        "- Informes tacticos de 12 secciones con Claude Sonnet 4.6\n"
+        "- Chatbot tactico con Claude Haiku 4.5\n"
+        "- PDF con branding RFAF + email automatico\n"
+        "- Stripe Checkout + billing portal\n\n"
+        "## Autenticacion\n"
+        "Usa JWT Bearer tokens. Obten un token via `POST /api/auth/login`.\n"
+        "Incluye el header `Authorization: Bearer <token>` en cada request protegido."
+    ),
     lifespan=lifespan,
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+    openapi_tags=[
+        {"name": "auth", "description": "Autenticacion: login, registro, password reset"},
+        {"name": "analyze", "description": "Analisis de partidos via YouTube URL"},
+        {"name": "reports", "description": "Informes tacticos completados + chatbot"},
+        {"name": "clubs", "description": "CRUD clubes + Stripe Checkout + billing portal"},
+        {"name": "admin", "description": "Panel administracion RFAF (MRR, costes, metricas)"},
+        {"name": "feedback", "description": "Feedback de clubes beta"},
+        {"name": "webhooks", "description": "Webhooks Stripe (idempotentes)"},
+    ],
 )
 
 # --- Rate Limiting ---

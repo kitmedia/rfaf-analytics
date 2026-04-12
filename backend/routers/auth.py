@@ -274,3 +274,34 @@ async def reset_password(
 
     logger.info("password_reset_success", user_id=user_id)
     return {"message": "Contrasena actualizada correctamente. Ya puedes iniciar sesion."}
+
+
+# --- Change Password (authenticated) ---
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@router.post("/change-password")
+async def change_password(
+    request: ChangePasswordRequest,
+    user: TokenPayload = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change password for authenticated user."""
+    if len(request.new_password) < 8:
+        raise HTTPException(status_code=400, detail="La nueva contrasena debe tener al menos 8 caracteres.")
+
+    result = await db.execute(select(User).where(User.id == uuid.UUID(user.user_id)))
+    db_user = result.scalar_one_or_none()
+
+    if not db_user or not bcrypt.verify(request.current_password, db_user.password_hash):
+        raise HTTPException(status_code=401, detail="La contrasena actual es incorrecta.")
+
+    db_user.password_hash = bcrypt.hash(request.new_password)
+    await db.commit()
+
+    logger.info("password_changed", user_id=user.user_id)
+    return {"message": "Contrasena actualizada correctamente."}

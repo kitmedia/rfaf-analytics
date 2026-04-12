@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { getAuth, logout } from "@/lib/auth";
+import ThemeToggle from "./ThemeToggle";
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -17,7 +18,8 @@ export default function Sidebar() {
     { href: "/analyze", label: "Nuevo análisis", icon: "🎬" },
     { href: "/reports", label: "Informes", icon: "📄" },
     { href: "/feedback", label: "Feedback", icon: "💬" },
-    { href: "/admin", label: "Admin RFAF", icon: "⚙️" },
+    { href: "/settings", label: "Configuracion", icon: "⚙️" },
+    { href: "/admin", label: "Admin RFAF", icon: "🛡️" },
   ];
 
   return (
@@ -57,9 +59,12 @@ export default function Sidebar() {
           </div>
         ) : (
           <a href="/login" className="text-xs text-indigo-400 hover:text-white">
-            Iniciar sesión
+            Iniciar sesion
           </a>
         )}
+        <div className="mt-2">
+          <ThemeToggle />
+        </div>
       </div>
     </aside>
   );

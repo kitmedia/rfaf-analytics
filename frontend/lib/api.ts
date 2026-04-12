@@ -128,6 +128,18 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
   return fetchAPI("/api/admin/dashboard");
 }
 
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+  token: string,
+): Promise<{ message: string }> {
+  return fetchAPI("/api/auth/change-password", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+}
+
 export interface ChatResponse {
   answer: string;
   model: string;

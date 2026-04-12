@@ -1,22 +1,152 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { listReports, getClub, type ReportSummary, type Club } from "@/lib/api";
-import { getClubId } from "@/lib/auth";
+import { getClubId, isAuthenticated } from "@/lib/auth";
 
-export default function Dashboard() {
-  const router = useRouter();
+export default function HomePage() {
+  const [authed, setAuthed] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setAuthed(isAuthenticated());
+  }, []);
+
+  if (authed === null) return null; // SSR hydration guard
+  if (!authed) return <Landing />;
+  return <Dashboard />;
+}
+
+/* ===== Landing (visitantes no logueados) ===== */
+
+function Landing() {
+  return (
+    <div className="min-h-screen bg-gray-50 -ml-64">
+      {/* Hero */}
+      <header className="bg-indigo-950 text-white">
+        <nav className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+          <h1 className="text-xl font-bold">RFAF Analytics</h1>
+          <div className="flex gap-4 text-sm">
+            <a href="/pricing" className="text-indigo-200 hover:text-white transition-colors">
+              Precios
+            </a>
+            <a href="/login" className="text-indigo-200 hover:text-white transition-colors">
+              Entrar
+            </a>
+            <a
+              href="/signup"
+              className="bg-white text-indigo-950 px-4 py-1.5 rounded-lg font-medium hover:bg-indigo-100 transition-colors"
+            >
+              Registrarse
+            </a>
+          </div>
+        </nav>
+
+        <div className="max-w-4xl mx-auto px-6 py-20 text-center">
+          <h2 className="text-4xl md:text-5xl font-bold leading-tight">
+            Analisis tactico con IA para tu club
+          </h2>
+          <p className="text-indigo-200 mt-4 text-lg max-w-2xl mx-auto">
+            Sube un video de YouTube de cualquier partido y recibe un informe tactico profesional
+            con xG, mapas de tiro, redes de pases y 12 secciones de analisis en minutos.
+          </p>
+          <div className="mt-8 flex gap-4 justify-center">
+            <a
+              href="/signup"
+              className="bg-white text-indigo-950 px-8 py-3 rounded-lg font-semibold hover:bg-indigo-100 transition-colors"
+            >
+              Empezar gratis
+            </a>
+            <a
+              href="/pricing"
+              className="border border-indigo-400 text-indigo-200 px-8 py-3 rounded-lg font-medium hover:bg-indigo-900 transition-colors"
+            >
+              Ver planes
+            </a>
+          </div>
+        </div>
+      </header>
+
+      {/* Features */}
+      <section className="max-w-6xl mx-auto px-6 py-16">
+        <h3 className="text-2xl font-bold text-gray-900 text-center mb-12">
+          Todo lo que tu cuerpo tecnico necesita
+        </h3>
+        <div className="grid md:grid-cols-3 gap-8">
+          {[
+            {
+              icon: "&#9917;",
+              title: "Analisis de video con IA",
+              desc: "Gemini 2.5 Flash extrae datos tacticos automaticamente de cualquier partido en YouTube.",
+            },
+            {
+              icon: "&#128200;",
+              title: "Metricas avanzadas",
+              desc: "xG (Expected Goals), PPDA, Field Tilt, mapas de tiro y redes de pases con mplsoccer.",
+            },
+            {
+              icon: "&#128196;",
+              title: "Informes profesionales",
+              desc: "Claude Sonnet genera informes de 12 secciones con PDF de branding RFAF listo para imprimir.",
+            },
+            {
+              icon: "&#128172;",
+              title: "Chatbot tactico",
+              desc: "Haz preguntas sobre el informe y recibe respuestas contextuales del asistente IA.",
+            },
+            {
+              icon: "&#128231;",
+              title: "Email automatico",
+              desc: "Recibe el informe completo con PDF adjunto en tu email al terminar el analisis.",
+            },
+            {
+              icon: "&#128274;",
+              title: "Seguro y privado",
+              desc: "Cada club solo ve sus propios datos. Autenticacion JWT y aislamiento completo.",
+            },
+          ].map((f) => (
+            <div key={f.title} className="bg-white rounded-xl shadow-sm border p-6">
+              <p className="text-2xl" dangerouslySetInnerHTML={{ __html: f.icon }} />
+              <h4 className="font-semibold text-gray-900 mt-3">{f.title}</h4>
+              <p className="text-gray-500 text-sm mt-2">{f.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="bg-indigo-950 text-white py-16">
+        <div className="max-w-3xl mx-auto text-center px-6">
+          <h3 className="text-2xl font-bold">Listo para analizar tu proximo partido?</h3>
+          <p className="text-indigo-200 mt-3">
+            Plan Basico desde 49 EUR/mes. Incluye 3 analisis de partido con informe completo.
+          </p>
+          <a
+            href="/signup"
+            className="inline-block mt-6 bg-white text-indigo-950 px-8 py-3 rounded-lg font-semibold hover:bg-indigo-100 transition-colors"
+          >
+            Crear cuenta
+          </a>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="max-w-6xl mx-auto px-6 py-8 text-center text-xs text-gray-400">
+        RFAF Analytics Platform v2.0 &middot; Real Federacion Aragonesa de Futbol &middot; 2026
+      </footer>
+    </div>
+  );
+}
+
+/* ===== Dashboard (usuarios logueados) ===== */
+
+function Dashboard() {
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [club, setClub] = useState<Club | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const clubId = getClubId();
-    if (!clubId) {
-      router.push("/login");
-      return;
-    }
+    if (!clubId) return;
 
     async function load() {
       try {
@@ -33,10 +163,12 @@ export default function Dashboard() {
       }
     }
     load();
-  }, [router]);
+  }, []);
 
   const done = reports.filter((r) => r.status === "done").length;
-  const processing = reports.filter((r) => r.status === "processing" || r.status === "pending").length;
+  const processing = reports.filter(
+    (r) => r.status === "processing" || r.status === "pending",
+  ).length;
 
   if (loading) {
     return (
@@ -51,7 +183,8 @@ export default function Dashboard() {
       <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
       {club && (
         <p className="text-gray-500 mt-1">
-          {club.name} · Plan {club.plan} · {club.analisis_mes_actual} análisis este mes
+          {club.name} &middot; Plan {club.plan} &middot; {club.analisis_mes_actual} analisis este
+          mes
         </p>
       )}
 
@@ -66,7 +199,7 @@ export default function Dashboard() {
           <p className="text-3xl font-bold text-amber-500 mt-2">{processing}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border p-6">
-          <p className="text-sm text-gray-500">Total análisis</p>
+          <p className="text-sm text-gray-500">Total analisis</p>
           <p className="text-3xl font-bold text-gray-900 mt-2">{reports.length}</p>
         </div>
       </div>
@@ -77,7 +210,7 @@ export default function Dashboard() {
           href="/analyze"
           className="inline-flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition-colors font-medium"
         >
-          🎬 Nuevo análisis de partido
+          Nuevo analisis de partido
         </a>
       </div>
 
@@ -86,7 +219,7 @@ export default function Dashboard() {
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Informes recientes</h2>
         {reports.length === 0 ? (
           <div className="bg-white rounded-xl shadow-sm border p-8 text-center text-gray-500">
-            No hay informes todavía. ¡Analiza tu primer partido!
+            No hay informes todavia. Analiza tu primer partido!
           </div>
         ) : (
           <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
@@ -123,7 +256,7 @@ export default function Dashboard() {
                     <td className="px-6 py-4 text-sm text-gray-600">
                       {r.xg_local != null && r.xg_visitante != null
                         ? `${r.xg_local.toFixed(2)} - ${r.xg_visitante.toFixed(2)}`
-                        : "—"}
+                        : "\u2014"}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {new Date(r.created_at).toLocaleDateString("es-ES")}
@@ -134,14 +267,14 @@ export default function Dashboard() {
                           href={`/reports/${r.analysis_id}`}
                           className="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
                         >
-                          Ver informe →
+                          Ver informe &rarr;
                         </a>
                       ) : r.status === "pending" || r.status === "processing" ? (
                         <a
                           href={`/analyze/${r.analysis_id}`}
                           className="text-amber-600 hover:text-amber-800 text-sm font-medium"
                         >
-                          Ver progreso →
+                          Ver progreso &rarr;
                         </a>
                       ) : null}
                     </td>
