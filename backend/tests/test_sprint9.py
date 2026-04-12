@@ -29,11 +29,12 @@ async def test_health_check_structure():
     assert "redis" in data
 
 
-@pytest.mark.asyncio
-async def test_chat_unknown_analysis():
+def test_chat_unknown_analysis():
     """Chat on unknown analysis_id must return 404."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.post(
+    import httpx
+
+    with httpx.Client(base_url="http://localhost:8000", timeout=10) as client:
+        response = client.post(
             f"/api/reports/{uuid.uuid4()}/chat",
             json={"question": "¿Cuál fue el xG del equipo local?", "club_id": str(uuid.uuid4())},
         )

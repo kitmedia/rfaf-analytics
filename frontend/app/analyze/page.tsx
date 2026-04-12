@@ -4,8 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { analyzeMatch } from "@/lib/api";
 import { trackEvent } from "@/lib/posthog";
-
-const DEMO_CLUB_ID = "00000000-0000-0000-0000-000000000001";
+import { getClubId } from "@/lib/auth";
 
 export default function AnalyzePage() {
   const router = useRouter();
@@ -27,7 +26,7 @@ export default function AnalyzePage() {
       const result = await analyzeMatch({
         ...form,
         competicion: form.competicion || undefined,
-        club_id: DEMO_CLUB_ID,
+        club_id: getClubId() || "",
       });
       trackEvent("analysis_submitted", {
         equipo_local: form.equipo_local,

@@ -107,3 +107,19 @@ export async function getClub(clubId: string): Promise<Club> {
 export function getPdfUrl(analysisId: string): string {
   return `${API_BASE}/api/reports/${analysisId}/pdf`;
 }
+
+export interface ChatResponse {
+  answer: string;
+  model: string;
+}
+
+export async function chatAboutReport(
+  analysisId: string,
+  question: string,
+  clubId: string,
+): Promise<ChatResponse> {
+  return fetchAPI(`/api/reports/${analysisId}/chat`, {
+    method: "POST",
+    body: JSON.stringify({ question, club_id: clubId }),
+  });
+}

@@ -104,15 +104,25 @@ def analyze_match_task(
 
     _task_start_time = time.time()
 
+    # Notify user that analysis started
+    _send_start_email(club_id, equipo_local, equipo_visitante, analysis_id)
+
     try:
         # Step 1: Gemini analysis
         _update_analysis_status(
             analysis_id, "processing", 10, "Analizando vídeo con Gemini..."
         )
 
-        from backend.services.gemini_service import analyze_youtube_video
+        from backend.services.gemini_service import analyze_youtube_video, _get_video_duration, CHUNK_DURATION, MAX_DIRECT_DURATION
 
         tactical_data = asyncio.run(analyze_youtube_video(youtube_url))
+
+        # Estimate Gemini cost based on video length
+        vid_dur = _get_video_duration(youtube_url)
+        if vid_dur and vid_dur > MAX_DIRECT_DURATION:
+            _cost_gemini = round(0.15 * (vid_dur // CHUNK_DURATION + 1), 2)
+        else:
+            _cost_gemini = 0.49
 
         # Step 2: Recalculate xG with our model (if available)
         _update_analysis_status(
@@ -172,7 +182,26 @@ def analyze_match_task(
             if s.get("equipo") == "visitante"
         )
 
-        # Step 7: Save everything to MatchAnalysis
+        # Step 7: Generate PDF and upload to R2
+        _update_analysis_status(
+            analysis_id, "processing", 85, "Generando PDF..."
+        )
+
+        from backend.services.pdf_service import generate_pdf
+        from backend.services.storage_service import upload_pdf
+
+        pdf_bytes = generate_pdf(
+            contenido_md=contenido_md,
+            charts_json=charts_json,
+            equipo_local=equipo_local,
+            equipo_visitante=equipo_visitante,
+            competicion=competicion,
+        )
+
+        pdf_key = f"reports/{analysis_id}.pdf"
+        pdf_url = upload_pdf(pdf_key, pdf_bytes)
+
+        # Step 8: Save everything to MatchAnalysis
         _update_analysis_status(
             analysis_id,
             "done",
@@ -180,20 +209,27 @@ def analyze_match_task(
             "Informe completado",
             contenido_md=contenido_md,
             charts_json=charts_json,
+            pdf_url=pdf_url,
             cost_claude=cost_claude,
-            cost_gemini=0.49,
+            cost_gemini=_cost_gemini,
             xg_local=round(xg_local, 2),
             xg_visitante=round(xg_visitante, 2),
         )
 
         duration_s = time.time() - _task_start_time
 
+        # Step 9: Send completion email
+        _send_done_email(
+            club_id, equipo_local, equipo_visitante,
+            round(xg_local, 2), round(xg_visitante, 2), pdf_url,
+        )
+
         from backend.services.tracking_service import track_analysis_completed
         track_analysis_completed(
             club_id=club_id,
             analysis_id=analysis_id,
             duration_s=duration_s,
-            cost_gemini=0.49,
+            cost_gemini=_cost_gemini,
             cost_claude=cost_claude,
             xg_local=round(xg_local, 2),
             xg_visitante=round(xg_visitante, 2),
@@ -230,3 +266,86 @@ def analyze_match_task(
         )
 
         raise self.retry(exc=exc)
+
+
+def _get_club_email(club_id: str) -> str | None:
+    """Fetch club email from DB."""
+    from backend.models import Club
+
+    with _SessionLocal() as session:
+        from sqlalchemy import select
+        result = session.execute(select(Club.email).where(Club.id == uuid.UUID(club_id)))
+        row = result.one_or_none()
+        return row[0] if row else None
+
+
+def _send_start_email(club_id: str, equipo_local: str, equipo_visitante: str, analysis_id: str):
+    """Send analysis started email. Silent fail."""
+    try:
+        email = _get_club_email(club_id)
+        if not email:
+            return
+        from backend.services.email_service import send_analysis_started_email
+        send_analysis_started_email(email, equipo_local, equipo_visitante, analysis_id)
+    except Exception as exc:
+        logger.warning("email_start_failed", error=str(exc))
+
+
+def _send_done_email(
+    club_id: str, equipo_local: str, equipo_visitante: str,
+    xg_local: float, xg_visitante: float, pdf_url: str | None,
+):
+    """Send report completed email. Silent fail."""
+    try:
+        email = _get_club_email(club_id)
+        if not email:
+            return
+        from backend.services.email_service import send_report_email
+        send_report_email(email, equipo_local, equipo_visitante, xg_local, xg_visitante, pdf_url)
+    except Exception as exc:
+        logger.warning("email_done_failed", error=str(exc))
+
+
+@app.task(name="weekly_digest")
+def weekly_digest_task():
+    """Send weekly digest email to all active clubs with their analysis summary."""
+    from backend.models import Club, MatchAnalysis, AnalysisStatus
+    from sqlalchemy import select, func
+    from datetime import datetime, timedelta
+
+    one_week_ago = datetime.utcnow() - timedelta(days=7)
+
+    with _SessionLocal() as session:
+        clubs = session.execute(
+            select(Club).where(Club.active == True)  # noqa: E712
+        ).scalars().all()
+
+        for club in clubs:
+            analyses = session.execute(
+                select(func.count(MatchAnalysis.id))
+                .where(MatchAnalysis.club_id == club.id)
+                .where(MatchAnalysis.created_at >= one_week_ago)
+                .where(MatchAnalysis.status == AnalysisStatus.DONE)
+            ).scalar()
+
+            if analyses and analyses > 0:
+                logger.info(
+                    "weekly_digest_club",
+                    club_id=str(club.id),
+                    club_name=club.name,
+                    analyses_this_week=analyses,
+                )
+
+    logger.info("weekly_digest_done", total_clubs=len(clubs))
+
+
+# Celery beat schedule (PDF-05)
+from celery.schedules import crontab
+
+app.conf.beat_schedule = {
+    "weekly-digest-monday-8am": {
+        "task": "weekly_digest",
+        "schedule": crontab(hour=8, minute=0, day_of_week=1),  # Monday 8:00 AM
+        "options": {"queue": "default"},
+    },
+}

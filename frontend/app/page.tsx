@@ -1,22 +1,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { listReports, getClub, type ReportSummary, type Club } from "@/lib/api";
-
-// Default club for demo — replace with auth
-const DEMO_CLUB_ID = "00000000-0000-0000-0000-000000000001";
+import { getClubId } from "@/lib/auth";
 
 export default function Dashboard() {
+  const router = useRouter();
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [club, setClub] = useState<Club | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const clubId = getClubId();
+    if (!clubId) {
+      router.push("/login");
+      return;
+    }
+
     async function load() {
       try {
         const [r, c] = await Promise.all([
-          listReports(DEMO_CLUB_ID),
-          getClub(DEMO_CLUB_ID),
+          listReports(clubId!),
+          getClub(clubId!),
         ]);
         setReports(r);
         setClub(c);
@@ -27,7 +33,7 @@ export default function Dashboard() {
       }
     }
     load();
-  }, []);
+  }, [router]);
 
   const done = reports.filter((r) => r.status === "done").length;
   const processing = reports.filter((r) => r.status === "processing" || r.status === "pending").length;

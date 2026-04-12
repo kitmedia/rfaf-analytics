@@ -11,6 +11,27 @@ from backend.database import create_tables
 
 logger = structlog.get_logger()
 
+# --- Sentry (OPS-03) ---
+SENTRY_DSN = os.getenv("SENTRY_DSN", "")
+if SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+    from sentry_sdk.integrations.celery import CeleryIntegration
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.2")),
+        environment=os.getenv("ENVIRONMENT", "production"),
+        release=os.getenv("RAILWAY_GIT_COMMIT_SHA", "local"),
+        integrations=[
+            FastApiIntegration(),
+            SqlalchemyIntegration(),
+            CeleryIntegration(),
+        ],
+    )
+    logger.info("sentry_initialized", dsn=SENTRY_DSN[:20] + "...")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -79,8 +100,9 @@ async def health_check():
     return checks
 
 
-from backend.routers import admin, analyze, clubs, feedback, reports, webhooks
+from backend.routers import admin, analyze, auth, clubs, feedback, reports, webhooks
 
+app.include_router(auth.router, prefix="/api")
 app.include_router(analyze.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
 app.include_router(clubs.router, prefix="/api")

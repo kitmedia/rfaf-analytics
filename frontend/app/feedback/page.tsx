@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { trackEvent } from "@/lib/posthog";
+import { getClubId } from "@/lib/auth";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const DEMO_CLUB_ID = "00000000-0000-0000-0000-000000000001";
 
 const CATEGORIES = [
   { value: "usabilidad", label: "Usabilidad", icon: "🖥️" },
@@ -36,7 +36,7 @@ export default function FeedbackPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          club_id: DEMO_CLUB_ID,
+          club_id: getClubId() || "",
           category,
           rating,
           comment: comment || null,

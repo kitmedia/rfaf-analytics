@@ -116,6 +116,50 @@ async def create_club(
     )
 
 
+class PortalResponse(BaseModel):
+    portal_url: str
+
+
+@router.post("/{club_id}/portal", response_model=PortalResponse)
+async def create_portal_session(
+    club_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Crea una sesión del portal de facturación de Stripe (PAY-03).
+
+    Permite al club gestionar su suscripción, métodos de pago y facturas.
+    """
+    if not STRIPE_SECRET_KEY:
+        raise HTTPException(status_code=500, detail="Stripe no configurado.")
+
+    stripe.api_key = STRIPE_SECRET_KEY
+
+    result = await db.execute(select(Club).where(Club.id == club_id))
+    club = result.scalar_one_or_none()
+    if not club:
+        raise HTTPException(status_code=404, detail="Club no encontrado.")
+
+    if not club.stripe_customer_id:
+        raise HTTPException(
+            status_code=400,
+            detail="El club no tiene una suscripción activa en Stripe.",
+        )
+
+    try:
+        session = stripe.billing_portal.Session.create(
+            customer=club.stripe_customer_id,
+            return_url=os.getenv(
+                "STRIPE_PORTAL_RETURN_URL",
+                "https://rfaf-analytics.es/dashboard",
+            ),
+        )
+    except stripe.error.StripeError as e:
+        logger.error("stripe_portal_error", club_id=str(club_id), error=str(e))
+        raise HTTPException(status_code=502, detail="Error al crear el portal de facturación.")
+
+    return PortalResponse(portal_url=session.url)
+
+
 @router.post("/{club_id}/checkout", response_model=CheckoutResponse)
 async def create_checkout_session(
     club_id: uuid.UUID,

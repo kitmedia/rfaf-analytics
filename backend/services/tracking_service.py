@@ -56,9 +56,9 @@ def _track(distinct_id: str, event: str, properties: dict[str, Any] | None = Non
             event=event,
             properties=properties or {},
         )
-        logger.debug("posthog_event_sent", event=event, distinct_id=distinct_id)
+        logger.debug("posthog_event_sent", event_name=event, distinct_id=distinct_id)
     except Exception as exc:
-        logger.error("posthog_capture_error", event=event, error=str(exc))
+        logger.error("posthog_capture_error", event_name=event, error=str(exc))
 
 
 def _identify(distinct_id: str, properties: dict[str, Any]):

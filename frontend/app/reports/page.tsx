@@ -2,15 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { listReports, type ReportSummary } from "@/lib/api";
-
-const DEMO_CLUB_ID = "00000000-0000-0000-0000-000000000001";
+import { getClubId } from "@/lib/auth";
 
 export default function ReportsPage() {
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    listReports(DEMO_CLUB_ID)
+    listReports(getClubId() || "")
       .then(setReports)
       .catch(() => {})
       .finally(() => setLoading(false));

@@ -4,7 +4,7 @@ WORKDIR /app
 
 # System deps for mplsoccer/matplotlib
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc libpq-dev libffi-dev \
+    gcc libpq-dev libffi-dev ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
