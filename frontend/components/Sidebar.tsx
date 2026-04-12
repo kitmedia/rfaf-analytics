@@ -6,8 +6,8 @@ import { getAuth, logout } from "@/lib/auth";
 export default function Sidebar() {
   const pathname = usePathname();
 
-  // Don't show sidebar on login page
-  if (pathname === "/login") return null;
+  // Don't show sidebar on public pages
+  if (["/login", "/signup", "/pricing"].includes(pathname)) return null;
 
   const auth = getAuth();
 
@@ -16,6 +16,7 @@ export default function Sidebar() {
     { href: "/analyze", label: "Nuevo análisis", icon: "🎬" },
     { href: "/reports", label: "Informes", icon: "📄" },
     { href: "/feedback", label: "Feedback", icon: "💬" },
+    { href: "/admin", label: "Admin RFAF", icon: "⚙️" },
   ];
 
   return (

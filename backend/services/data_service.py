@@ -124,8 +124,12 @@ def predict_xg(shots: list[dict]) -> list[dict]:
     Returns the same list with 'xg_model' field added.
     """
     if not XG_MODEL_PATH.exists():
-        logger.warn("xg_model_not_found", msg="Usando xG estimado de Gemini")
-        return shots
+        logger.info("xg_model_auto_training", msg="Modelo no encontrado, entrenando automaticamente...")
+        try:
+            train_rfaf_xg_model()
+        except Exception as exc:
+            logger.warning("xg_model_auto_train_failed", error=str(exc), msg="Usando xG estimado de Gemini")
+            return shots
 
     with open(XG_MODEL_PATH, "rb") as f:
         model = pickle.load(f)

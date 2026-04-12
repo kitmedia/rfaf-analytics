@@ -4,8 +4,12 @@ import os
 from contextlib import asynccontextmanager
 
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from backend.database import create_tables
 
@@ -51,6 +55,22 @@ app = FastAPI(
     description="Plataforma SaaS de analisis tactico de futbol con IA",
     lifespan=lifespan,
 )
+
+# --- Rate Limiting ---
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["60/minute"],
+    storage_uri=os.getenv("REDIS_URL", "redis://redis:6379/0"),
+)
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Demasiadas solicitudes. Intenta de nuevo en unos segundos."},
+    )
 
 ALLOWED_ORIGINS = os.getenv(
     "ALLOWED_ORIGINS",

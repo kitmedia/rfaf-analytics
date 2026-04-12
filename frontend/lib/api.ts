@@ -108,6 +108,26 @@ export function getPdfUrl(analysisId: string): string {
   return `${API_BASE}/api/reports/${analysisId}/pdf`;
 }
 
+export interface AdminDashboard {
+  total_clubs: number;
+  active_clubs: number;
+  mrr_eur: number;
+  total_analyses: number;
+  analyses_done: number;
+  analyses_error: number;
+  total_cost_gemini: number;
+  total_cost_claude: number;
+  total_cost_eur: number;
+  margin_pct: number;
+  avg_rating: number | null;
+  feedback_count: number;
+  clubs_by_plan: Record<string, number>;
+}
+
+export async function getAdminDashboard(): Promise<AdminDashboard> {
+  return fetchAPI("/api/admin/dashboard");
+}
+
 export interface ChatResponse {
   answer: string;
   model: string;

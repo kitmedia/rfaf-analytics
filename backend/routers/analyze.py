@@ -3,8 +3,10 @@
 import re
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, field_validator
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +22,7 @@ PLAN_LIMITS = {
 }
 
 router = APIRouter(prefix="/analyze", tags=["analyze"])
+limiter = Limiter(key_func=get_remote_address)
 
 YOUTUBE_URL_REGEX = re.compile(
     r"^(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/live/)[\w\-]{11}"
@@ -69,8 +72,10 @@ class AnalysisStatusResponse(BaseModel):
 
 
 @router.post("/match", response_model=AnalyzeMatchResponse)
+@limiter.limit("5/minute")
 async def analyze_match(
     request: AnalyzeMatchRequest,
+    req: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """Encola análisis de partido. Devuelve analysis_id inmediatamente."""

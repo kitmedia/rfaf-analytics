@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from jose import JWTError, jwt
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from passlib.hash import bcrypt
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
@@ -15,6 +17,7 @@ from backend.database import get_db
 from backend.models import Club, User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+limiter = Limiter(key_func=get_remote_address)
 
 JWT_SECRET = os.getenv("JWT_SECRET", "cambiar-en-produccion")
 JWT_ALGORITHM = "HS256"
@@ -84,9 +87,62 @@ async def get_current_club_id(user: TokenPayload = Depends(get_current_user)) ->
     return uuid.UUID(user.club_id)
 
 
+class RegisterRequest(BaseModel):
+    club_name: str
+    name: str
+    email: EmailStr
+    password: str
+
+
+@router.post("/register", response_model=LoginResponse, status_code=201)
+@limiter.limit("3/minute")
+async def register(
+    request: RegisterRequest,
+    req: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Register a new club + user. Returns JWT token immediately."""
+    # Check duplicate email
+    existing = await db.execute(select(User).where(User.email == request.email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Ya existe una cuenta con ese email.")
+
+    # Create club (Básico plan by default)
+    club = Club(name=request.club_name, email=request.email)
+    db.add(club)
+    await db.flush()
+
+    # Create user
+    user = User(
+        club_id=club.id,
+        email=request.email,
+        password_hash=bcrypt.hash(request.password),
+        name=request.name,
+    )
+    db.add(user)
+    await db.flush()
+
+    token, expires_in = _create_token(
+        user_id=str(user.id),
+        club_id=str(club.id),
+        role=user.role.value,
+    )
+
+    return LoginResponse(
+        access_token=token,
+        club_id=str(club.id),
+        club_name=club.name,
+        user_name=user.name,
+        plan=club.plan.value,
+        expires_in=expires_in,
+    )
+
+
 @router.post("/login", response_model=LoginResponse)
+@limiter.limit("10/minute")
 async def login(
     request: LoginRequest,
+    req: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """Authenticate user with email/password. Returns JWT token."""

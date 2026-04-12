@@ -50,7 +50,8 @@ python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 
 # -- Monitoring --
-sentry-sdk[fastapi]==2.14.0
+sentry-sdk[fastapi,celery]==2.14.0
+slowapi==0.1.9
 posthog==3.6.0
 structlog==24.4.0
 

@@ -26,9 +26,33 @@ export async function login(email: string, password: string): Promise<AuthData> 
   return data;
 }
 
+export async function register(
+  clubName: string,
+  name: string,
+  email: string,
+  password: string,
+): Promise<AuthData> {
+  const res = await fetch(`${API_BASE}/api/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ club_name: clubName, name, email, password }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || "Error al registrarse");
+  }
+
+  const data: AuthData = await res.json();
+  saveAuth(data);
+  return data;
+}
+
 export function saveAuth(data: AuthData) {
   if (typeof window === "undefined") return;
   localStorage.setItem("rfaf_auth", JSON.stringify(data));
+  // Set cookie for Next.js middleware (middleware can't read localStorage)
+  document.cookie = `rfaf_token=${data.access_token}; path=/; max-age=${data.expires_in}; SameSite=Lax`;
 }
 
 export function getAuth(): AuthData | null {
@@ -53,6 +77,7 @@ export function getClubId(): string | null {
 export function logout() {
   if (typeof window === "undefined") return;
   localStorage.removeItem("rfaf_auth");
+  document.cookie = "rfaf_token=; path=/; max-age=0";
   window.location.href = "/login";
 }
 
