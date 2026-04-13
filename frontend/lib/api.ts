@@ -125,7 +125,7 @@ export interface AdminDashboard {
 }
 
 export async function getAdminDashboard(): Promise<AdminDashboard> {
-  return fetchAPI("/api/admin/dashboard");
+  return fetchAdminAPI("/api/admin/dashboard");
 }
 
 export async function changePassword(

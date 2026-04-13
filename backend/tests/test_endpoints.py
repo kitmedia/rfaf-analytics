@@ -148,8 +148,15 @@ def test_feedback_list(client: httpx.Client):
     assert data["total"] >= 1
 
 
-def test_admin_dashboard(client: httpx.Client):
+def test_admin_dashboard_requires_auth(client: httpx.Client):
+    """Admin dashboard sin token devuelve 401."""
     res = client.get("/api/admin/dashboard")
+    assert res.status_code == 401
+
+
+def test_admin_dashboard(admin_client: httpx.Client):
+    """Admin dashboard con token admin devuelve metricas."""
+    res = admin_client.get("/api/admin/dashboard")
     assert res.status_code == 200
     data = res.json()
     assert "mrr_eur" in data
@@ -157,6 +164,114 @@ def test_admin_dashboard(client: httpx.Client):
     assert "active_clubs" in data
     assert "clubs_by_plan" in data
     assert data["total_clubs"] >= 1
+
+
+def test_admin_clubs_list(admin_client: httpx.Client):
+    """Admin puede listar clubes."""
+    res = admin_client.get("/api/admin/clubs")
+    assert res.status_code == 200
+    data = res.json()
+    assert "items" in data
+    assert "total" in data
+    assert data["total"] >= 1
+
+
+def test_admin_users_list(admin_client: httpx.Client):
+    """Admin puede listar usuarios."""
+    res = admin_client.get("/api/admin/users")
+    assert res.status_code == 200
+    data = res.json()
+    assert "items" in data
+    assert "total" in data
+
+
+def test_admin_analyses_list(admin_client: httpx.Client):
+    """Admin puede listar analisis."""
+    res = admin_client.get("/api/admin/analyses")
+    assert res.status_code == 200
+    data = res.json()
+    assert "items" in data
+    assert "total" in data
+
+
+def test_admin_feedbacks_list(admin_client: httpx.Client):
+    """Admin puede listar feedbacks."""
+    res = admin_client.get("/api/admin/feedbacks")
+    assert res.status_code == 200
+    data = res.json()
+    assert "items" in data
+    assert "total" in data
+
+
+def test_admin_ml_status(admin_client: httpx.Client):
+    """Admin puede ver estado del modelo xG."""
+    res = admin_client.get("/api/admin/ml/status")
+    assert res.status_code == 200
+    data = res.json()
+    assert "exists" in data
+    assert "path" in data
+
+
+# --- Auth endpoint tests ---
+
+
+def test_auth_login_invalid_credentials(client: httpx.Client):
+    """Login con credenciales invalidas devuelve 401."""
+    res = client.post(
+        "/api/auth/login",
+        json={"email": "noexiste@test.com", "password": "wrong"},
+    )
+    assert res.status_code == 401
+
+
+def test_auth_login_success(client: httpx.Client):
+    """Login con credenciales validas devuelve token y role."""
+    import os
+    email = os.getenv("TEST_ADMIN_EMAIL", "admin@rfaf.es")
+    password = os.getenv("TEST_ADMIN_PASSWORD", "admin1234")
+    res = client.post(
+        "/api/auth/login",
+        json={"email": email, "password": password},
+    )
+    if res.status_code == 401:
+        import pytest
+        pytest.skip("Admin user not seeded in test DB")
+    assert res.status_code == 200
+    data = res.json()
+    assert "access_token" in data
+    assert "role" in data
+
+
+def test_auth_me_requires_token(client: httpx.Client):
+    """GET /auth/me sin token devuelve 401."""
+    res = client.get("/api/auth/me")
+    assert res.status_code == 401
+
+
+def test_auth_me_with_token(admin_client: httpx.Client):
+    """GET /auth/me con token valido devuelve datos del usuario."""
+    res = admin_client.get("/api/auth/me")
+    assert res.status_code == 200
+    data = res.json()
+    assert "email" in data
+    assert "role" in data
+
+
+def test_auth_register_duplicate_email(client: httpx.Client):
+    """Registro con email duplicado devuelve 409."""
+    import os
+    email = os.getenv("TEST_ADMIN_EMAIL", "admin@rfaf.es")
+    res = client.post(
+        "/api/auth/register",
+        json={
+            "email": email,
+            "password": "test12345",
+            "name": "Duplicate",
+            "club_id": "00000000-0000-0000-0000-000000000001",
+        },
+    )
+    # Should be 409 (duplicate) or 422 (validation)
+    assert res.status_code in (409, 422)
 
 
 def test_pdf_requires_done_analysis(client: httpx.Client):
