@@ -80,6 +80,44 @@ def upload_pdf(key: str, pdf_bytes: bytes, content_type: str = "application/pdf"
         return None
 
 
+def upload_video(key: str, file_bytes: bytes, content_type: str = "video/mp4") -> str | None:
+    """Upload video to R2. Returns public URL or None.
+
+    Args:
+        key: Object key (e.g., 'videos/club-uuid/video-uuid.mp4')
+        file_bytes: Raw video bytes
+        content_type: MIME type
+
+    Returns:
+        Public URL string, or None if upload fails.
+    """
+    client = _get_client()
+    if client is None:
+        return None
+
+    try:
+        client.put_object(
+            Bucket=R2_BUCKET,
+            Key=key,
+            Body=file_bytes,
+            ContentType=content_type,
+        )
+
+        public_url = f"{R2_PUBLIC_URL}/{key}" if R2_PUBLIC_URL else None
+
+        logger.info(
+            "r2_video_upload_success",
+            key=key,
+            size_mb=round(len(file_bytes) / (1024 * 1024), 1),
+            public_url=public_url,
+        )
+        return public_url
+
+    except Exception as exc:
+        logger.error("r2_video_upload_error", key=key, error=str(exc))
+        return None
+
+
 def download_pdf(key: str) -> bytes | None:
     """Download PDF from R2. Returns bytes or None."""
     client = _get_client()

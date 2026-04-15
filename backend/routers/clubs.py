@@ -5,7 +5,7 @@ import uuid
 
 import stripe
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -202,3 +202,186 @@ async def create_checkout_session(
         raise HTTPException(status_code=502, detail="Error al crear la sesión de pago.")
 
     return CheckoutResponse(checkout_url=session.url, session_id=session.id)
+
+
+# --- Club Dashboard (Story 6.1) ---
+
+
+class ClubDashboardResponse(BaseModel):
+    analyses_this_month: int
+    analyses_total: int
+    plan: str
+    plan_limit: int | None
+    usage_pct: int
+    last_analysis_date: str | None
+
+
+@router.get("/{club_id}/dashboard", response_model=ClubDashboardResponse)
+async def get_club_dashboard(
+    club_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Dashboard del club con métricas de uso."""
+    from backend.models import MatchAnalysis, AnalysisStatus
+    from sqlalchemy import func
+    from datetime import datetime
+
+    result = await db.execute(select(Club).where(Club.id == club_id))
+    club = result.scalar_one_or_none()
+    if not club:
+        raise HTTPException(status_code=404, detail="Club no encontrado.")
+
+    now = datetime.utcnow()
+    first_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    month_count = await db.execute(
+        select(func.count(MatchAnalysis.id))
+        .where(MatchAnalysis.club_id == club_id)
+        .where(MatchAnalysis.status == AnalysisStatus.DONE)
+        .where(MatchAnalysis.created_at >= first_of_month)
+    )
+    analyses_this_month = month_count.scalar() or 0
+
+    total_count = await db.execute(
+        select(func.count(MatchAnalysis.id))
+        .where(MatchAnalysis.club_id == club_id)
+        .where(MatchAnalysis.status == AnalysisStatus.DONE)
+    )
+    analyses_total = total_count.scalar() or 0
+
+    last_analysis = await db.execute(
+        select(func.max(MatchAnalysis.created_at))
+        .where(MatchAnalysis.club_id == club_id)
+        .where(MatchAnalysis.status == AnalysisStatus.DONE)
+    )
+    last_date = last_analysis.scalar()
+
+    plan_limits = {PlanType.BASICO: 3, PlanType.PROFESIONAL: None, PlanType.FEDERADO: None}
+    plan_limit = plan_limits.get(club.plan)
+    usage_pct = round((club.analisis_mes_actual / plan_limit) * 100) if plan_limit else 0
+
+    return ClubDashboardResponse(
+        analyses_this_month=analyses_this_month,
+        analyses_total=analyses_total,
+        plan=club.plan.value,
+        plan_limit=plan_limit,
+        usage_pct=usage_pct,
+        last_analysis_date=last_date.isoformat() if last_date else None,
+    )
+
+
+# --- Sponsor Logo Upload (Story 6.2) ---
+
+
+class SponsorLogoResponse(BaseModel):
+    sponsor_logo_url: str | None
+
+
+@router.post("/{club_id}/sponsor-logo", response_model=SponsorLogoResponse)
+async def upload_sponsor_logo(
+    club_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Sube logo del patrocinador para incluir en PDFs."""
+    result = await db.execute(select(Club).where(Club.id == club_id))
+    club = result.scalar_one_or_none()
+    if not club:
+        raise HTTPException(status_code=404, detail="Club no encontrado.")
+
+    # Validate format
+    if not file.filename or not file.filename.lower().endswith((".png", ".jpg", ".jpeg")):
+        raise HTTPException(status_code=422, detail="Formato no soportado. Usa PNG o JPG.")
+
+    file_bytes = await file.read()
+    if len(file_bytes) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="El logo no puede superar 2 MB.")
+
+    # Upload to R2
+    from backend.services.storage_service import upload_pdf as r2_upload
+    import uuid as uuid_mod
+    logo_key = f"logos/{club_id}/{uuid_mod.uuid4()}.{file.filename.rsplit('.', 1)[-1]}"
+    logo_url = r2_upload(logo_key, file_bytes, file.content_type or "image/png")
+
+    if not logo_url:
+        raise HTTPException(status_code=500, detail="Error al subir el logo.")
+
+    club.sponsor_logo_url = logo_url
+    await db.commit()
+
+    return SponsorLogoResponse(sponsor_logo_url=logo_url)
+
+
+# --- Export Club Report PDF (Story 6.3) ---
+
+
+@router.get("/{club_id}/export-pdf")
+async def export_club_pdf(
+    club_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Genera PDF resumen del club para asambleas."""
+    from backend.models import MatchAnalysis, AnalysisStatus
+    from backend.services.pdf_service import generate_pdf
+    from fastapi.responses import StreamingResponse
+    from sqlalchemy import func
+    from datetime import datetime
+    import io as io_mod
+
+    result = await db.execute(select(Club).where(Club.id == club_id))
+    club = result.scalar_one_or_none()
+    if not club:
+        raise HTTPException(status_code=404, detail="Club no encontrado.")
+
+    total = await db.execute(
+        select(func.count(MatchAnalysis.id))
+        .where(MatchAnalysis.club_id == club_id)
+        .where(MatchAnalysis.status == AnalysisStatus.DONE)
+    )
+    analyses_total = total.scalar() or 0
+
+    avg_xg = await db.execute(
+        select(func.avg(MatchAnalysis.xg_local))
+        .where(MatchAnalysis.club_id == club_id)
+        .where(MatchAnalysis.status == AnalysisStatus.DONE)
+        .where(MatchAnalysis.xg_local.isnot(None))
+    )
+    avg = avg_xg.scalar()
+
+    cost_total = await db.execute(
+        select(func.sum(MatchAnalysis.cost_gemini) + func.sum(MatchAnalysis.cost_claude))
+        .where(MatchAnalysis.club_id == club_id)
+        .where(MatchAnalysis.status == AnalysisStatus.DONE)
+    )
+    total_cost = cost_total.scalar() or 0
+
+    md = f"""# Informe de Actividad — {club.name}
+
+## Resumen
+
+- **Plan:** {club.plan.value}
+- **Análisis realizados:** {analyses_total}
+- **xG promedio local:** {round(avg, 2) if avg else 'N/A'}
+- **Coste total plataforma:** {round(total_cost, 2)} EUR
+- **ROI estimado:** El análisis táctico profesional equivaldría a {analyses_total * 200} EUR en servicios de consultoría
+
+---
+
+*Generado por RFAF Analytics Platform — {datetime.now().strftime('%d/%m/%Y')}*
+"""
+
+    pdf_bytes = generate_pdf(
+        contenido_md=md,
+        charts_json=None,
+        equipo_local=club.name,
+        equipo_visitante="Resumen",
+        competicion=None,
+        sponsor_logo_url=club.sponsor_logo_url,
+    )
+
+    filename = f"informe_{club.name.replace(' ', '_')}.pdf"
+    return StreamingResponse(
+        io_mod.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

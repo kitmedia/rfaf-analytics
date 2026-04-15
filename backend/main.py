@@ -148,7 +148,7 @@ async def health_check():
     return checks
 
 
-from backend.routers import admin, analyze, auth, clubs, feedback, reports, webhooks
+from backend.routers import admin, analyze, auth, clubs, exercises, federation, feedback, players, reports, teams, upcoming, upload, webhooks
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(analyze.router, prefix="/api")
@@ -157,3 +157,9 @@ app.include_router(clubs.router, prefix="/api")
 app.include_router(webhooks.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(feedback.router, prefix="/api")
+app.include_router(exercises.router, prefix="/api")
+app.include_router(players.router, prefix="/api")
+app.include_router(upload.router, prefix="/api")
+app.include_router(upcoming.router, prefix="/api")
+app.include_router(teams.router, prefix="/api")
+app.include_router(federation.router, prefix="/api")

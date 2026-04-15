@@ -25,6 +25,7 @@ from backend.models import (
     Match,
     MatchAnalysis,
     PlanType,
+    UpcomingMatch,
     User,
     UserRole,
 )
@@ -1055,3 +1056,65 @@ async def list_feedbacks(
     ]
 
     return FeedbackListResponse(items=items, total=total, page=page, per_page=per_page)
+
+
+# --- Upcoming Matches CSV Import ---
+
+
+class UpcomingMatchImportRow(BaseModel):
+    club_name: str
+    rival_name: str
+    match_date: str
+    competition: str | None = None
+
+
+class UpcomingMatchImportResponse(BaseModel):
+    imported: int
+    errors: list[str]
+
+
+@router.post("/upcoming-matches/import", response_model=UpcomingMatchImportResponse)
+async def import_upcoming_matches(
+    rows: list[UpcomingMatchImportRow],
+    current_user: TokenPayload = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Importa partidos próximos desde datos estructurados (admin only)."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Solo administradores pueden importar partidos.")
+
+    imported = 0
+    errors = []
+
+    for i, row in enumerate(rows):
+        # Find club by name
+        result = await db.execute(
+            select(Club).where(Club.name.ilike(f"%{row.club_name}%"))
+        )
+        club = result.scalar_one_or_none()
+
+        if not club:
+            errors.append(f"Fila {i + 1}: Club '{row.club_name}' no encontrado")
+            continue
+
+        try:
+            match_date = datetime.fromisoformat(row.match_date)
+        except ValueError:
+            errors.append(f"Fila {i + 1}: Fecha '{row.match_date}' no válida (usa formato ISO)")
+            continue
+
+        upcoming = UpcomingMatch(
+            club_id=club.id,
+            rival_name=row.rival_name,
+            match_date=match_date,
+            competition=row.competition,
+            source="federation_calendar",
+        )
+        db.add(upcoming)
+        imported += 1
+
+    await db.commit()
+
+    logger.info("upcoming_matches_imported", imported=imported, errors=len(errors))
+
+    return UpcomingMatchImportResponse(imported=imported, errors=errors)

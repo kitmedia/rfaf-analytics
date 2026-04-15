@@ -16,7 +16,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import JSON, UUID
+from sqlalchemy.dialects.postgresql import JSON, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -83,6 +83,11 @@ class Club(Base):
     stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     analisis_mes_actual: Mapped[int] = mapped_column(Integer, default=0)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sponsor_logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    acquisition_channel: Mapped[str | None] = mapped_column(String(50), default="direct")
+    federation_convention_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -191,6 +196,12 @@ class MatchAnalysis(Base):
     contenido_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     pdf_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     charts_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    # Training plan (P3)
+    training_plan_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    # Pipeline resilience (NFR-8)
+    sections_available: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     # Cost tracking
     cost_gemini: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -383,4 +394,113 @@ class Feedback(Base):
     __table_args__ = (
         Index("ix_feedbacks_club_id", "club_id"),
         CheckConstraint("rating >= 1 AND rating <= 5", name="ck_feedback_rating_range"),
+    )
+
+
+class ExerciseTracking(Base):
+    __tablename__ = "exercise_tracking"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    club_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("clubs.id", ondelete="CASCADE"), nullable=False
+    )
+    match_analysis_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("match_analyses.id", ondelete="CASCADE"), nullable=False
+    )
+    exercise_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    completed: Mapped[bool] = mapped_column(Boolean, default=True)
+    completed_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    club: Mapped["Club"] = relationship()
+    analysis: Mapped["MatchAnalysis"] = relationship()
+
+    __table_args__ = (
+        Index("ix_exercise_tracking_club_id", "club_id"),
+        Index("ix_exercise_tracking_analysis_id", "match_analysis_id"),
+        # Unique constraint prevents duplicate exercise tracking
+        # UniqueConstraint handled via migration: uq_exercise_tracking_club_analysis_name
+    )
+
+
+class ModelShadowRun(Base):
+    __tablename__ = "model_shadow_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    analysis_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("match_analyses.id", ondelete="CASCADE"), nullable=False
+    )
+    model_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    model_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    xg_result_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    divergence_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    analysis: Mapped["MatchAnalysis"] = relationship()
+
+    __table_args__ = (
+        Index("ix_model_shadow_runs_analysis_id", "analysis_id"),
+    )
+
+
+class FederationConvention(Base):
+    __tablename__ = "federation_conventions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    federation_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    discount_code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    discount_pct: Mapped[int] = mapped_column(Integer, default=30)
+    start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_federation_conventions_code", "discount_code"),
+    )
+
+
+class UpcomingMatch(Base):
+    __tablename__ = "upcoming_matches"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    club_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("clubs.id", ondelete="CASCADE"), nullable=False
+    )
+    rival_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    match_date: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    competition: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    source: Mapped[str] = mapped_column(String(50), nullable=False, default="manual_input")
+    auto_analysis_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("match_analyses.id", ondelete="SET NULL"), nullable=True
+    )
+    notification_sent: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    club: Mapped["Club"] = relationship()
+
+    __table_args__ = (
+        Index("ix_upcoming_matches_club_id", "club_id"),
+        Index("ix_upcoming_matches_match_date", "match_date"),
     )

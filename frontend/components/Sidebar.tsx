@@ -16,9 +16,12 @@ export default function Sidebar() {
   const baseLinks = [
     { href: "/", label: "Dashboard", icon: "📊" },
     { href: "/analyze", label: "Nuevo análisis", icon: "🎬" },
+    { href: "/upload", label: "Subir vídeo", icon: "📹" },
     { href: "/reports", label: "Informes", icon: "📄" },
+    { href: "/players", label: "Jugadores", icon: "👤" },
+    { href: "/rivals", label: "Buscar rival", icon: "🔍" },
     { href: "/feedback", label: "Feedback", icon: "💬" },
-    { href: "/settings", label: "Configuracion", icon: "⚙️" },
+    { href: "/settings", label: "Configuración", icon: "⚙️" },
   ];
 
   const links =
@@ -33,18 +36,19 @@ export default function Sidebar() {
         <p className="text-xs text-indigo-300 mt-1">Análisis táctico con IA</p>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 p-4 space-y-1" aria-label="Navegación principal">
         {links.map((link) => (
           <a
             key={link.href}
             href={link.href}
+            aria-current={pathname === link.href ? "page" : undefined}
             className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-sm ${
               pathname === link.href
                 ? "bg-indigo-800 text-white"
                 : "hover:bg-indigo-800 text-indigo-200"
             }`}
           >
-            {link.icon} {link.label}
+            <span aria-hidden="true">{link.icon}</span> {link.label}
           </a>
         ))}
       </nav>

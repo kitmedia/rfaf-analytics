@@ -63,6 +63,13 @@ export interface ReportDetail {
   xg_visitante: number | null;
   contenido_md: string | null;
   charts_json: Record<string, string> | null;
+  training_plan_json: {
+    contenido_md: string;
+    generated_at: string;
+    model: string;
+    cost_eur: number;
+  } | null;
+  sections_available: Record<string, boolean> | null;
   cost_gemini: number | null;
   cost_claude: number | null;
   duration_s: number | null;
@@ -137,6 +144,229 @@ export async function changePassword(
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+}
+
+// --- Exercise Tracking ---
+
+export interface ExerciseStatus {
+  exercise_name: string;
+  completed: boolean;
+  completed_date: string | null;
+}
+
+export async function markExerciseComplete(
+  clubId: string,
+  analysisId: string,
+  exerciseName: string,
+): Promise<ExerciseStatus> {
+  return fetchAPI("/api/exercises/mark-complete", {
+    method: "POST",
+    body: JSON.stringify({ club_id: clubId, analysis_id: analysisId, exercise_name: exerciseName }),
+  });
+}
+
+export async function unmarkExercise(
+  clubId: string,
+  analysisId: string,
+  exerciseName: string,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/exercises/unmark`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ club_id: clubId, analysis_id: analysisId, exercise_name: exerciseName }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: "Error del servidor" }));
+    throw new Error(error.detail || `Error ${res.status}`);
+  }
+}
+
+export async function getExercisesByAnalysis(
+  analysisId: string,
+  clubId: string,
+): Promise<{ exercises: ExerciseStatus[] }> {
+  return fetchAPI(`/api/exercises/by-analysis/${analysisId}?club_id=${clubId}`);
+}
+
+export async function getWeeklySummary(
+  clubId: string,
+): Promise<{ completed_count: number; total_count: number; exercises: ExerciseStatus[] }> {
+  return fetchAPI(`/api/exercises/weekly-summary?club_id=${clubId}`);
+}
+
+// --- Trends & Impact ---
+
+export interface TrendWeek {
+  week: string;
+  xg_local: number;
+  xg_visitante: number;
+  match_count: number;
+}
+
+export interface TrendsResponse {
+  has_enough_data: boolean;
+  weeks: TrendWeek[];
+}
+
+export interface ImpactResponse {
+  has_impact: boolean;
+  metric_name: string | null;
+  improvement_pct: number | null;
+  message: string | null;
+}
+
+export async function getTrends(clubId: string): Promise<TrendsResponse> {
+  return fetchAPI(`/api/reports/trends?club_id=${clubId}`);
+}
+
+export async function getExerciseImpact(clubId: string): Promise<ImpactResponse> {
+  return fetchAPI(`/api/exercises/impact?club_id=${clubId}`);
+}
+
+// --- Scouting ---
+
+export interface ScoutReportDetail {
+  id: string;
+  player_name: string;
+  player_number: number | null;
+  status: string;
+  contenido_md: string | null;
+  cost_eur: number | null;
+  created_at: string;
+}
+
+export async function getScoutReport(
+  scoutReportId: string,
+  clubId: string,
+): Promise<ScoutReportDetail> {
+  return fetchAPI(`/api/reports/scout/${scoutReportId}?club_id=${clubId}`);
+}
+
+export function getScoutPdfUrl(scoutReportId: string, clubId: string): string {
+  return `${API_BASE}/api/reports/scout/${scoutReportId}/pdf?club_id=${clubId}`;
+}
+
+// --- Retry Section ---
+
+export async function retrySection(
+  analysisId: string,
+  clubId: string,
+  section: string,
+): Promise<{ analysis_id: string; section: string; status: string }> {
+  return fetchAPI(`/api/reports/${analysisId}/retry-section`, {
+    method: "POST",
+    body: JSON.stringify({ club_id: clubId, section }),
+  });
+}
+
+// --- Federation ---
+
+export interface FederationDashboard {
+  total_clubs: number;
+  active_clubs: number;
+  analyses_this_month: number;
+  analyses_total: number;
+  avg_xg_local: number | null;
+  avg_xg_visitante: number | null;
+}
+
+export async function getFederationDashboard(): Promise<FederationDashboard> {
+  return fetchAPI("/api/federation/dashboard");
+}
+
+// --- Teams & Rivals ---
+
+export interface TeamSearchResult {
+  name: string;
+  match_count: number;
+}
+
+export interface TeamAnalysesResponse {
+  team_name: string;
+  analysis_count: number;
+  latest_analysis_date: string | null;
+  analyses: { analysis_id: string; date: string; opponent: string }[];
+}
+
+export async function searchTeams(query: string): Promise<TeamSearchResult[]> {
+  return fetchAPI(`/api/teams/search?q=${encodeURIComponent(query)}`);
+}
+
+export async function getTeamAnalyses(teamName: string): Promise<TeamAnalysesResponse> {
+  return fetchAPI(`/api/teams/${encodeURIComponent(teamName)}/analyses`);
+}
+
+export async function createManualUpcoming(
+  clubId: string,
+  rivalName: string,
+  matchDate: string,
+  competition?: string,
+): Promise<unknown> {
+  return fetchAPI("/api/upcoming-matches/manual", {
+    method: "POST",
+    body: JSON.stringify({ club_id: clubId, rival_name: rivalName, match_date: matchDate, competition }),
+  });
+}
+
+// --- Video Upload ---
+
+export async function uploadVideo(
+  file: File,
+  clubId: string,
+  equipoLocal: string,
+  equipoVisitante: string,
+  competicion?: string,
+): Promise<AnalyzeResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("club_id", clubId);
+  formData.append("equipo_local", equipoLocal);
+  formData.append("equipo_visitante", equipoVisitante);
+  if (competicion) formData.append("competicion", competicion);
+
+  const res = await fetch(`${API_BASE}/api/upload/video`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: "Error del servidor" }));
+    throw new Error(error.detail || `Error ${res.status}`);
+  }
+
+  return res.json();
+}
+
+// --- Players ---
+
+export interface PlayerListItem {
+  id: string;
+  name: string;
+  shirt_number: number | null;
+  position: string | null;
+  has_scout_report: boolean;
+  scout_report_id: string | null;
+  scout_status: string | null;
+}
+
+export async function listPlayers(clubId: string): Promise<{ players: PlayerListItem[]; total: number }> {
+  return fetchAPI(`/api/players?club_id=${clubId}`);
+}
+
+export interface TrainingPlanResponse {
+  analysis_id: string;
+  status: string;
+  detail: string;
+}
+
+export async function generateTrainingPlan(
+  analysisId: string,
+  clubId: string,
+): Promise<TrainingPlanResponse> {
+  return fetchAPI(`/api/reports/${analysisId}/training-plan`, {
+    method: "POST",
+    body: JSON.stringify({ club_id: clubId }),
   });
 }
 

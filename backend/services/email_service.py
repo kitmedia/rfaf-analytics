@@ -169,3 +169,151 @@ def send_password_reset_email(to_email: str, reset_url: str) -> bool:
     except Exception as e:
         logger.error("email_error", type="password_reset", to=to_email, error=str(e))
         return False
+
+
+def send_weekly_adoption_email(
+    to_email: str,
+    club_name: str,
+    completed_count: int,
+    total_count: int,
+    improvement_msg: str | None,
+    recommended_exercises: list[str],
+    has_recent_analysis: bool,
+) -> bool:
+    """Send weekly adoption summary email."""
+    if not RESEND_API_KEY:
+        logger.warn("resend_api_key_missing", msg="Email adopcion no enviado")
+        return False
+
+    resend.api_key = RESEND_API_KEY
+
+    pct = round((completed_count / total_count) * 100) if total_count > 0 else 0
+
+    progress_bar = f"""
+    <div style="background: #e5e7eb; border-radius: 8px; height: 12px; margin: 10px 0;">
+        <div style="background: #16a34a; border-radius: 8px; height: 12px; width: {pct}%;"></div>
+    </div>
+    """
+
+    impact_section = ""
+    if improvement_msg:
+        impact_section = f"""
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px; border-radius: 8px; margin: 15px 0;">
+            <p style="margin: 0; color: #166534; font-size: 14px;">{improvement_msg}</p>
+        </div>
+        """
+
+    exercises_html = ""
+    if recommended_exercises:
+        items = "".join(f"<li style='margin: 4px 0; color: #374151;'>{e}</li>" for e in recommended_exercises[:3])
+        exercises_html = f"""
+        <div style="margin: 15px 0;">
+            <p style="font-weight: bold; color: #1a237e; margin-bottom: 8px;">Ejercicios recomendados esta semana:</p>
+            <ul style="padding-left: 20px; margin: 0;">{items}</ul>
+        </div>
+        """
+
+    cta_section = ""
+    if not has_recent_analysis:
+        cta_section = """
+        <div style="text-align: center; margin: 20px 0;">
+            <p style="color: #6b7280; font-size: 14px;">Llevas más de 2 semanas sin analizar un partido.</p>
+            <a href="https://app.rfaf-analytics.es" style="display: inline-block; background: #1a237e; color: white;
+               padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                Analiza tu próximo partido
+            </a>
+        </div>
+        """
+
+    html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #1a237e;">📊 Tu resumen semanal</h2>
+        <p>Hola, <b>{club_name}</b>. Aquí tienes tu progreso de esta semana:</p>
+        <div style="background: #f9fafb; padding: 15px; border-radius: 8px; margin: 15px 0;">
+            <p style="margin: 0 0 5px 0; font-size: 16px; font-weight: bold; color: #111827;">
+                {completed_count} de {total_count} ejercicios implementados ({pct}%)
+            </p>
+            {progress_bar}
+        </div>
+        {impact_section}
+        {exercises_html}
+        {cta_section}
+        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="color: #999; font-size: 12px;">RFAF Analytics Platform</p>
+    </div>
+    """
+
+    try:
+        resend.Emails.send({
+            "from": FROM_EMAIL,
+            "to": [to_email],
+            "subject": f"📊 {club_name}: {completed_count} de {total_count} ejercicios esta semana",
+            "html": html,
+        })
+        logger.info("email_sent", type="weekly_adoption", to=to_email, club=club_name)
+        return True
+    except Exception as e:
+        logger.error("email_error", type="weekly_adoption", to=to_email, error=str(e))
+        return False
+
+
+def send_rival_analysis_email(
+    to_email: str,
+    club_name: str,
+    rival_name: str,
+    has_analysis: bool,
+    match_date: str | None = None,
+) -> bool:
+    """Send rival analysis notification email."""
+    if not RESEND_API_KEY:
+        logger.warn("resend_api_key_missing", msg="Email rival no enviado")
+        return False
+
+    resend.api_key = RESEND_API_KEY
+
+    if has_analysis:
+        html = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #1a237e;">⚽ Tu próximo rival: {rival_name}</h2>
+            <p>Hola, <b>{club_name}</b>.</p>
+            <p>Hemos analizado los últimos partidos de <b>{rival_name}</b> para que puedas preparar tu semana de entrenamiento.</p>
+            {f'<p style="color: #666;">Partido programado: {match_date}</p>' if match_date else ''}
+            <a href="https://app.rfaf-analytics.es" style="display: inline-block; background: #1a237e; color: white;
+               padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 15px 0;">
+                Ver análisis del rival
+            </a>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+            <p style="color: #999; font-size: 12px;">RFAF Analytics Platform</p>
+        </div>
+        """
+        subject = f"⚽ Análisis de tu rival: {rival_name}"
+    else:
+        html = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #1a237e;">⚽ Próximo partido: vs {rival_name}</h2>
+            <p>Hola, <b>{club_name}</b>.</p>
+            <p>Tienes un partido próximo contra <b>{rival_name}</b>, pero no tenemos datos previos de este equipo.</p>
+            {f'<p style="color: #666;">Partido programado: {match_date}</p>' if match_date else ''}
+            <p>¿Tienes un vídeo de alguno de sus partidos? Súbelo y te generamos un análisis táctico.</p>
+            <a href="https://app.rfaf-analytics.es/upload" style="display: inline-block; background: #1a237e; color: white;
+               padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 15px 0;">
+                Subir vídeo del rival
+            </a>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+            <p style="color: #999; font-size: 12px;">RFAF Analytics Platform</p>
+        </div>
+        """
+        subject = f"⚽ Próximo partido: vs {rival_name}"
+
+    try:
+        resend.Emails.send({
+            "from": FROM_EMAIL,
+            "to": [to_email],
+            "subject": subject,
+            "html": html,
+        })
+        logger.info("email_sent", type="rival_analysis", to=to_email, rival=rival_name)
+        return True
+    except Exception as e:
+        logger.error("email_error", type="rival_analysis", to=to_email, error=str(e))
+        return False

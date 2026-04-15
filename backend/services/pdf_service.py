@@ -159,6 +159,7 @@ def generate_pdf(
     equipo_local: str,
     equipo_visitante: str,
     competicion: str | None = None,
+    sponsor_logo_url: str | None = None,
 ) -> bytes:
     """Generate complete PDF report.
 
@@ -187,7 +188,19 @@ def generate_pdf(
     story = []
 
     # --- Cover page ---
-    story.append(Spacer(1, 4 * cm))
+    # Sponsor logo (Story 6.2)
+    if sponsor_logo_url:
+        try:
+            import urllib.request
+            logo_data = urllib.request.urlopen(sponsor_logo_url).read()
+            logo_buf = io.BytesIO(logo_data)
+            story.append(Image(logo_buf, width=5 * cm, height=2 * cm, kind="proportional"))
+            story.append(Spacer(1, 1 * cm))
+        except Exception as exc:
+            logger.warning("pdf_sponsor_logo_error", error=str(exc))
+            story.append(Spacer(1, 4 * cm))
+    else:
+        story.append(Spacer(1, 4 * cm))
     story.append(Paragraph("RFAF Analytics", styles["RFAFTitle"]))
     story.append(Spacer(1, 1 * cm))
     story.append(Paragraph(
