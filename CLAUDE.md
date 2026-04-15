@@ -143,6 +143,12 @@ All 9 sprints completed (40/40 user stories, 223 story points) plus P0/P1/P2 pro
 | `/admin/tasks` | Celery task monitor (live) | Admin only |
 | `/admin/operations` | Backups + xG model training | Admin only |
 | `/admin/feedback-admin` | Feedback overview | Admin only |
+| `/club/dashboard` | Club dashboard | Protected |
+| `/federation/dashboard` | Federation dashboard (RFAF) | Protected |
+| `/players` | Players management | Protected |
+| `/rivals` | Rivals / upcoming matches | Protected |
+| `/upload` | Video upload (alternative to YouTube URL) | Protected |
+| `/reports/scouting/[id]` | Scouting report detail | Protected |
 
 ### Backend Endpoints
 | Method | Path | Description |
@@ -185,6 +191,23 @@ All 9 sprints completed (40/40 user stories, 223 story points) plus P0/P1/P2 pro
 | GET | `/api/feedback` | List feedback |
 | POST | `/api/webhooks/stripe` | Stripe webhooks |
 | GET | `/api/health` | Health check |
+| GET | `/api/players` | List players |
+| GET | `/api/teams/search` | Search teams |
+| GET | `/api/teams/{name}/analyses` | Team analyses history |
+| GET | `/api/federation/dashboard` | Federation metrics |
+| GET | `/api/federation/export-pdf` | Federation dashboard PDF |
+| GET | `/api/federation/conventions` | List federation conventions |
+| POST | `/api/federation/conventions` | Create convention |
+| GET | `/api/federation/validate-code/{code}` | Validate federation code |
+| GET | `/api/federation/channel-metrics` | Channel metrics |
+| GET | `/api/upcoming-matches` | List upcoming matches |
+| POST | `/api/upcoming-matches/manual` | Add match manually |
+| POST | `/api/exercises/mark-complete` | Mark exercise done |
+| POST | `/api/exercises/unmark` | Unmark exercise |
+| GET | `/api/exercises/by-analysis/{id}` | Exercises for analysis |
+| GET | `/api/exercises/weekly-summary` | Weekly exercise summary |
+| GET | `/api/exercises/impact` | Exercise impact metrics |
+| POST | `/api/upload/video` | Upload video file (alt to YouTube URL) |
 
 ## Frontend Note
 
